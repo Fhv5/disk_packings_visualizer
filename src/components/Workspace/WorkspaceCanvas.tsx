@@ -37,6 +37,7 @@ export function WorkspaceCanvas() {
   const draggedDiskRef = useRef<number | null>(null);
   const hasDraggedRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
+  const isInitialFitRef = useRef(true);
 
 
   const fitToView = useCallback(() => {
@@ -65,8 +66,9 @@ export function WorkspaceCanvas() {
   }, [workspace]);
 
   useEffect(() => {
+    isInitialFitRef.current = true;
     fitToView();
-  }, [workspace?.id]);
+  }, [workspace?.id, fitToView]);
 
   const performRollStep = useCallback((deltaTimeMs: number = 16.6) => {
     const state = useAppStore.getState();
@@ -407,7 +409,12 @@ export function WorkspaceCanvas() {
       if (canvasRef.current && containerRef.current) {
         canvasRef.current.width = containerRef.current.clientWidth;
         canvasRef.current.height = containerRef.current.clientHeight;
-        render();
+        if (isInitialFitRef.current) {
+          fitToView();
+          isInitialFitRef.current = false;
+        } else {
+          render();
+        }
       }
     };
     
@@ -426,7 +433,7 @@ export function WorkspaceCanvas() {
       observer.disconnect();
       window.removeEventListener('resize', handleResize);
     };
-  }, [render]);
+  }, [render, fitToView]);
 
   const screenToWorld = (clientX: number, clientY: number): Point2D => {
     if (!canvasRef.current) return [0, 0];

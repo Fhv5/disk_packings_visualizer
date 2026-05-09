@@ -41,8 +41,9 @@ export function WorkspaceCanvas() {
 
 
   const fitToView = useCallback(() => {
-    if (!workspace || !canvasRef.current) return;
-    const { minX, minY, maxX, maxY } = getBoundingBox(workspace.centers as Point2D[]);
+    const currentWorkspace = useAppStore.getState().activeWorkspace;
+    if (!currentWorkspace || !canvasRef.current) return;
+    const { minX, minY, maxX, maxY } = getBoundingBox(currentWorkspace.centers as Point2D[]);
     
     const pMinX = minX - 2;
     const pMinY = minY - 2;
@@ -63,7 +64,7 @@ export function WorkspaceCanvas() {
       x: pMinX + w / 2,
       y: pMinY + h / 2
     });
-  }, [workspace]);
+  }, []);
 
   useEffect(() => {
     isInitialFitRef.current = true;
@@ -750,7 +751,7 @@ export function WorkspaceCanvas() {
             ? 'bg-white/90 text-zinc-500 border-zinc-200 shadow-sm'
             : 'bg-zinc-900/80 text-zinc-400 border-zinc-700'
         }`}>
-          Left Drag: Move Disks &middot; Shift+Drag / Middle Click: Pan &middot; Right Click: Pin/Unpin &middot; Scroll: Zoom
+          Left Drag: Move Disks &middot; Right Click: Pin/Unpin &middot; Scroll: Zoom &middot; Left Click + Shift: Multiple Disk Selection
         </div>
       </div>
     </div>

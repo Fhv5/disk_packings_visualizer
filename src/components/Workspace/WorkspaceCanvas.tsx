@@ -400,6 +400,14 @@ export function WorkspaceCanvas() {
 
   }, [workspace, scale, offset, pinnedDisks, showGrid, selectedDisks, theme]);
 
+  const renderRef = useRef(render);
+  const fitToViewRef = useRef(fitToView);
+
+  useEffect(() => {
+    renderRef.current = render;
+    fitToViewRef.current = fitToView;
+  });
+
   useEffect(() => {
     render();
   }, [render]);
@@ -407,13 +415,17 @@ export function WorkspaceCanvas() {
   useEffect(() => {
     const handleResize = () => {
       if (canvasRef.current && containerRef.current) {
-        canvasRef.current.width = containerRef.current.clientWidth;
-        canvasRef.current.height = containerRef.current.clientHeight;
-        if (isInitialFitRef.current) {
-          fitToView();
+        const w = containerRef.current.clientWidth;
+        const h = containerRef.current.clientHeight;
+        canvasRef.current.width = w;
+        canvasRef.current.height = h;
+        
+        const currentWorkspace = useAppStore.getState().activeWorkspace;
+        if (isInitialFitRef.current && w > 50 && h > 50 && currentWorkspace) {
+          fitToViewRef.current();
           isInitialFitRef.current = false;
         } else {
-          render();
+          renderRef.current();
         }
       }
     };
@@ -433,7 +445,7 @@ export function WorkspaceCanvas() {
       observer.disconnect();
       window.removeEventListener('resize', handleResize);
     };
-  }, [render, fitToView]);
+  }, []);
 
   const screenToWorld = (clientX: number, clientY: number): Point2D => {
     if (!canvasRef.current) return [0, 0];

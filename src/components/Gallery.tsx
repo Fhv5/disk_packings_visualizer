@@ -10,11 +10,19 @@ export function Gallery() {
   const setSelectedClass = useAppStore((state) => state.setSelectedClass);
   const theme = useAppStore((state) => state.theme);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [diskFilter, setDiskFilter] = useState<string>('all');
-  const [contactFilter, setContactFilter] = useState<string>('all');
-  const [dofFilter, setDofFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<string>('disks-asc');
+  const searchQuery = useAppStore((state) => state.searchQuery);
+  const setSearchQuery = useAppStore((state) => state.setSearchQuery);
+  const diskFilter = useAppStore((state) => state.diskFilter);
+  const setDiskFilter = useAppStore((state) => state.setDiskFilter);
+  const contactFilter = useAppStore((state) => state.contactFilter);
+  const setContactFilter = useAppStore((state) => state.setContactFilter);
+  const dofFilter = useAppStore((state) => state.dofFilter);
+  const setDofFilter = useAppStore((state) => state.setDofFilter);
+  const sortBy = useAppStore((state) => state.sortBy);
+  const setSortBy = useAppStore((state) => state.setSortBy);
+  const resetFilters = useAppStore((state) => state.resetFilters);
+
+  const hasActiveFilters = searchQuery !== '' || diskFilter !== 'all' || contactFilter !== 'all' || dofFilter !== 'all' || sortBy !== 'disks-asc';
 
   const allClasses = useMemo(() => {
     return loadedFiles.flatMap(f => f.contactClasses);
@@ -176,6 +184,19 @@ export function Gallery() {
             onChange={setSortBy}
             options={sortOptions}
           />
+
+          {hasActiveFilters && (
+            <button
+              onClick={resetFilters}
+              className={`px-3 py-2 text-xs font-medium rounded-lg border transition-all duration-200 shadow-md cursor-pointer flex items-center justify-center ${
+                theme === 'light'
+                  ? 'bg-white hover:bg-zinc-50 text-red-600 hover:text-red-500 border-zinc-200 hover:border-zinc-300'
+                  : 'bg-zinc-900 text-red-400 hover:text-red-300 border-zinc-700 hover:border-zinc-500'
+              }`}
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
       </div>
 
@@ -244,13 +265,7 @@ export function Gallery() {
         }`}>
           <p className="text-sm">No contact classes match your search and filter criteria.</p>
           <button 
-            onClick={() => {
-              setSearchQuery('');
-              setDiskFilter('all');
-              setContactFilter('all');
-              setDofFilter('all');
-              setSortBy('disks-asc');
-            }}
+            onClick={resetFilters}
             className={`mt-4 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all duration-200 cursor-pointer ${
               theme === 'light'
                 ? 'bg-white hover:bg-zinc-50 text-zinc-700 border-zinc-200 shadow-sm'

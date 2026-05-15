@@ -6,7 +6,7 @@ A browser-based research tool for experimenting with equal-radii hard disk packi
 
 You can access it [here](https://packings.fhenry.site/).
 
-## Core Capabilities
+## Features
 
 ### Interactive Visualization
 Browse and interact with different equal-radii hard disk packing configurations. The tool categorizes embeddings by their disk count, allowing for direct visual examination of contact classes and geometric properties rather than analyzing raw coordinates.

@@ -1,9 +1,10 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Gallery } from './Gallery';
 import { Workspace } from './Workspace/Workspace';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Download } from 'lucide-react';
+import { ExportModal } from './ExportModal';
 
 export function MainView() {
   const loadedFiles = useAppStore(state => state.loadedFiles);
@@ -11,6 +12,8 @@ export function MainView() {
   const setSelectedClass = useAppStore(state => state.setSelectedClass);
   const theme = useAppStore(state => state.theme);
   const toggleTheme = useAppStore(state => state.toggleTheme);
+  
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   
   const errors = useAppStore(state => state.errors);
   const warnings = useAppStore(state => state.warnings);
@@ -139,6 +142,17 @@ export function MainView() {
         
         <div className="flex items-center gap-4">
           <button
+            onClick={() => setIsExportModalOpen(true)}
+            className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm ${
+              theme === 'light'
+                ? 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 hover:text-zinc-900'
+                : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-600 hover:text-white'
+            }`}
+            title="Export JSON Data"
+          >
+            <Download size={15} />
+          </button>
+          <button
             onClick={toggleTheme}
             className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm ${
               theme === 'light'
@@ -174,6 +188,8 @@ export function MainView() {
           <Gallery />
         )}
       </main>
+
+      {isExportModalOpen && <ExportModal onClose={() => setIsExportModalOpen(false)} />}
     </div>
   );
 }

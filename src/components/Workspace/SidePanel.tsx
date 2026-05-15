@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { Pin, Undo2, Redo2, RotateCcw, ChevronDown, ChevronRight, Play, Pause, Plus, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import { convexHull, calculatePerimeter, Point2D } from '@/lib/geometry';
+import { convexHull, calculatePerimeter, getSymbolicPerimeter, Point2D } from '@/lib/geometry';
 import { evaluateMath } from '@/lib/parser';
 
 export function SidePanel() {
@@ -42,13 +42,15 @@ export function SidePanel() {
   const [showCoords, setShowCoords] = useState(true);
   const [showMetrics, setShowMetrics] = useState(true);
   const [showMotors, setShowMotors] = useState(true);
+  const [showSymbolicPerimeter, setShowSymbolicPerimeter] = useState(true);
 
   const metrics = useMemo(() => {
-    if (!workspace) return { perimeter: 0, hullVertices: 0 };
+    if (!workspace) return { perimeter: 0, hullVertices: 0, symbolicPerimeter: null };
     const hull = convexHull(workspace.centers as Point2D[]);
     return {
       perimeter: calculatePerimeter(hull),
-      hullVertices: hull.length
+      hullVertices: hull.length,
+      symbolicPerimeter: getSymbolicPerimeter(hull)
     };
   }, [workspace]);
 
@@ -190,8 +192,12 @@ export function SidePanel() {
               theme === 'light' ? 'bg-white border-zinc-200 shadow-sm' : 'bg-zinc-950 border-zinc-800/50 text-zinc-400'
             }`}>
               <span className={`text-[10px] uppercase tracking-wider mb-1 ${theme === 'light' ? 'text-zinc-400' : 'text-zinc-500'}`}>Perimeter</span>
-              <span className={`font-mono transition-colors duration-200 ${theme === 'light' ? 'text-zinc-800' : 'text-zinc-200'}`}>
-                {metrics.perimeter.toFixed(6)}
+              <span 
+                className={`font-mono transition-colors duration-200 ${theme === 'light' ? 'text-zinc-800' : 'text-zinc-200'} ${metrics.symbolicPerimeter ? 'cursor-pointer hover:opacity-70' : ''}`}
+                onClick={() => metrics.symbolicPerimeter && setShowSymbolicPerimeter(prev => !prev)}
+                title={metrics.symbolicPerimeter ? "Toggle exact value" : ""}
+              >
+                {showSymbolicPerimeter && metrics.symbolicPerimeter ? metrics.symbolicPerimeter : metrics.perimeter.toFixed(6)}
               </span>
             </div>
             <div className={`flex flex-col col-span-2 p-2 rounded-md border transition-colors duration-200 ${

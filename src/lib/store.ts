@@ -53,6 +53,20 @@ interface AppState {
   redoStacks: Record<number, [number, number][]>;
   theme: 'dark' | 'light';
 
+  searchQuery: string;
+  diskFilter: string;
+  contactFilter: string;
+  dofFilter: string;
+  sortBy: string;
+
+  setSearchQuery: (query: string) => void;
+  setDiskFilter: (filter: string) => void;
+  setContactFilter: (filter: string) => void;
+  setDofFilter: (filter: string) => void;
+  setSortBy: (sort: string) => void;
+  resetFilters: () => void;
+  getFilteredClasses: () => ParsedContactClass[];
+
   addLoadedFile: (file: ParsedFile) => void;
   setSelectedClass: (cls: ParsedContactClass | null) => void;
   setActiveWorkspace: (cls: ParsedContactClass | null) => void;
@@ -86,7 +100,7 @@ interface AppState {
   toggleTheme: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   loadedFiles: defaultFiles,
   selectedClass: null,
   activeWorkspace: null,
@@ -104,6 +118,79 @@ export const useAppStore = create<AppState>((set) => ({
   undoStacks: {},
   redoStacks: {},
   theme: 'dark',
+  
+  searchQuery: '',
+  diskFilter: 'all',
+  contactFilter: 'all',
+  dofFilter: 'all',
+  sortBy: 'disks-asc',
+  
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  setDiskFilter: (filter) => set({ diskFilter: filter }),
+  setContactFilter: (filter) => set({ contactFilter: filter }),
+  setDofFilter: (filter) => set({ dofFilter: filter }),
+  setSortBy: (sort) => set({ sortBy: sort }),
+  resetFilters: () => set({
+    searchQuery: '',
+    diskFilter: 'all',
+    contactFilter: 'all',
+    dofFilter: 'all',
+    sortBy: 'disks-asc'
+  }),
+  
+  getFilteredClasses: () => {
+    const state = get();
+    const allClasses = state.loadedFiles.flatMap(f => f.contactClasses);
+    let result = [...allClasses];
+
+    if (state.searchQuery.trim() !== '') {
+      const q = state.searchQuery.toLowerCase().trim();
+      result = result.filter(c => 
+        c.id.toLowerCase().includes(q) || 
+        c.fileName.toLowerCase().includes(q)
+      );
+    }
+
+    if (state.diskFilter !== 'all') {
+      const val = Number(state.diskFilter);
+      result = result.filter(c => c.disksCount === val);
+    }
+
+    if (state.contactFilter !== 'all') {
+      const val = Number(state.contactFilter);
+      result = result.filter(c => c.contacts.length === val);
+    }
+
+    if (state.dofFilter !== 'all') {
+      const val = Number(state.dofFilter);
+      result = result.filter(c => c.dof === val);
+    }
+
+    const compareIds = (idA: string | undefined | null, idB: string | undefined | null): number => {
+      const valA = idA || '';
+      const valB = idB || '';
+      const partsA = valA.split('_');
+      const partsB = valB.split('_');
+      const numA = partsA.length > 1 ? Number(partsA[1]) : 0;
+      const numB = partsB.length > 1 ? Number(partsB[1]) : 0;
+      if (isNaN(numA) || isNaN(numB)) {
+        return valA.localeCompare(valB);
+      }
+      return numA - numB;
+    };
+
+    result.sort((a, b) => {
+      if (state.sortBy === 'disks-asc') return a.disksCount - b.disksCount || compareIds(a.id, b.id);
+      if (state.sortBy === 'disks-desc') return b.disksCount - a.disksCount || compareIds(a.id, b.id);
+      if (state.sortBy === 'contacts-asc') return a.contacts.length - b.contacts.length || compareIds(a.id, b.id);
+      if (state.sortBy === 'contacts-desc') return b.contacts.length - a.contacts.length || compareIds(a.id, b.id);
+      if (state.sortBy === 'dof-asc') return a.dof - b.dof || compareIds(a.id, b.id);
+      if (state.sortBy === 'dof-desc') return b.dof - a.dof || compareIds(a.id, b.id);
+      return 0;
+    });
+
+    return result;
+  },
   
   addLoadedFile: (file) => 
     set((state) => ({ loadedFiles: [...state.loadedFiles, file] })),

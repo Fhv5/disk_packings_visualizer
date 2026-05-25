@@ -45,7 +45,10 @@ export function ExportModal({ onClose }: ExportModalProps) {
       if (includeStructure) {
         graph.discos = source.disksCount;
         graph.nombre = source.id;
-        graph.centros = source.centers;
+        graph.centros = source.centers.map((c: Point2D) => [
+          Number(c[0].toFixed(15)),
+          Number(c[1].toFixed(15))
+        ]);
         graph.contactos = source.contacts;
       }
       
@@ -61,7 +64,7 @@ export function ExportModal({ onClose }: ExportModalProps) {
         if (includePerimeter) {
           const exact = getSymbolicPerimeter(hull);
           graph.perimeter = {
-            numeric: calculatePerimeter(hull),
+            numeric: Number(calculatePerimeter(hull).toFixed(15)),
             symbolic: exact
           };
         }

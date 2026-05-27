@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Gallery } from './Gallery';
 import { Workspace } from './Workspace/Workspace';
-import { Sun, Moon, Download } from 'lucide-react';
+import { Sun, Moon, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ExportModal } from './ExportModal';
 
 export function MainView() {
@@ -12,6 +12,10 @@ export function MainView() {
   const setSelectedClass = useAppStore(state => state.setSelectedClass);
   const theme = useAppStore(state => state.theme);
   const toggleTheme = useAppStore(state => state.toggleTheme);
+  const isAdvancedMode = useAppStore(state => state.isAdvancedMode);
+  const toggleAdvancedMode = useAppStore(state => state.toggleAdvancedMode);
+  const goToNextConfig = useAppStore(state => state.goToNextConfig);
+  const goToPrevConfig = useAppStore(state => state.goToPrevConfig);
   
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   
@@ -53,6 +57,16 @@ export function MainView() {
       window.removeEventListener('unload', handleUnload);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }, [theme]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -101,6 +115,26 @@ export function MainView() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [loadedFiles, setSelectedClass]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+      if (!selectedClass) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPrevConfig();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToNextConfig();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedClass, goToNextConfig, goToPrevConfig]);
+
   return (
     <div className={`flex flex-col h-screen w-screen overflow-hidden transition-colors duration-200 ${
       theme === 'light' ? 'bg-zinc-50 text-zinc-800' : 'bg-zinc-950 text-zinc-200'
@@ -129,18 +163,56 @@ export function MainView() {
               >
                 &larr; Gallery
               </button>
-              <span className={`text-sm font-mono font-semibold px-3 py-1 rounded-md transition-colors duration-200 ${
-                theme === 'light' 
-                  ? 'bg-zinc-100 border border-zinc-200 text-zinc-700' 
-                  : 'bg-zinc-800/50 border border-zinc-700 text-zinc-300'
-              }`}>
-                {selectedClass.id}
-              </span>
+              
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={goToPrevConfig}
+                  className={`p-1 rounded transition-all duration-150 flex items-center justify-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+                    theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'
+                  }`}
+                  title="Previous Configuration (Left Arrow)"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                <span className={`text-sm font-mono font-semibold px-3 py-1 rounded-md transition-colors duration-200 ${
+                  theme === 'light' 
+                    ? 'bg-zinc-100 border border-zinc-200 text-zinc-700' 
+                    : 'bg-zinc-800/50 border border-zinc-700 text-zinc-300'
+                }`}>
+                  {selectedClass.id}
+                </span>
+
+                <button
+                  onClick={goToNextConfig}
+                  className={`p-1 rounded transition-all duration-150 flex items-center justify-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+                    theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'
+                  }`}
+                  title="Next Configuration (Right Arrow)"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </>
           )}
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {selectedClass && (
+            <button
+              onClick={toggleAdvancedMode}
+              className={`text-[11px] uppercase tracking-wider font-bold px-3 py-1.5 rounded-lg border transition-all duration-200 cursor-pointer shadow-sm ${
+                isAdvancedMode
+                  ? 'bg-amber-600 hover:bg-amber-500 border-amber-600 text-white shadow-amber-900/20'
+                  : theme === 'light'
+                    ? 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 hover:text-zinc-800'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white'
+              }`}
+              title="Toggle Advanced Analysis Overlay"
+            >
+              Advanced Mode
+            </button>
+          )}
           <button
             onClick={() => setIsExportModalOpen(true)}
             className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm ${

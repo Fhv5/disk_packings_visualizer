@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Pin, Undo2, Redo2, RotateCcw, ChevronDown, ChevronRight, Play, Pause, Plus, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { convexHull, calculatePerimeter, getSymbolicPerimeter, Point2D } from '@/lib/geometry';
@@ -37,6 +37,11 @@ export function SidePanel() {
   const restoreDisk = useAppStore(state => state.restoreDisk);
 
   const [localInputs, setLocalInputs] = useState<Record<number, { x: string; y: string }>>({});
+  const [precision, setPrecision] = useState(6);
+
+  useEffect(() => {
+    setLocalInputs({});
+  }, [precision]);
 
   const [showHistory, setShowHistory] = useState(true);
   const [showCoords, setShowCoords] = useState(true);
@@ -62,8 +67,8 @@ export function SidePanel() {
 
   const handleCoordinateChange = (idx: number, type: 'x' | 'y', value: string) => {
     const currentInput = localInputs[idx] || {
-      x: workspace.centers[idx][0].toFixed(6),
-      y: workspace.centers[idx][1].toFixed(6)
+      x: workspace.centers[idx][0].toFixed(precision),
+      y: workspace.centers[idx][1].toFixed(precision)
     };
     const updated = { ...currentInput, [type]: value };
     setLocalInputs({
@@ -168,7 +173,7 @@ export function SidePanel() {
             Metrics
           </h2>
           <span className={`text-xs font-bold font-mono border rounded px-2 py-0.5 transition-colors duration-200 ${
-            theme === 'light' ? 'text-zinc-700 bg-zinc-100 border-zinc-200 shadow-sm' : 'text-zinc-300 bg-zinc-850 border-zinc-800'
+            theme === 'light' ? 'text-zinc-700 bg-zinc-100 border-zinc-200 shadow-sm' : 'text-zinc-300 bg-zinc-800 border-zinc-800'
           }`}>{workspace.id}</span>
         </div>
         
@@ -197,7 +202,7 @@ export function SidePanel() {
                 onClick={() => metrics.symbolicPerimeter && setShowSymbolicPerimeter(prev => !prev)}
                 title={metrics.symbolicPerimeter ? "Toggle exact value" : ""}
               >
-                {showSymbolicPerimeter && metrics.symbolicPerimeter ? metrics.symbolicPerimeter : metrics.perimeter.toFixed(6)}
+                {showSymbolicPerimeter && metrics.symbolicPerimeter ? metrics.symbolicPerimeter : metrics.perimeter.toFixed(precision)}
               </span>
             </div>
             <div className={`flex flex-col col-span-2 p-2 rounded-md border transition-colors duration-200 ${
@@ -207,6 +212,40 @@ export function SidePanel() {
               <span className={`font-mono transition-colors duration-200 ${theme === 'light' ? 'text-zinc-800' : 'text-zinc-200'}`}>
                 {metrics.hullVertices}
               </span>
+            </div>
+            
+            {/* Precision control */}
+            <div className={`flex justify-between items-center col-span-2 p-2 rounded-md border transition-colors duration-200 ${
+              theme === 'light' ? 'bg-white border-zinc-200 shadow-sm' : 'bg-zinc-950 border-zinc-800/50 text-zinc-400'
+            }`}>
+              <span className={`text-[10px] uppercase tracking-wider ${theme === 'light' ? 'text-zinc-400' : 'text-zinc-500'}`}>Precision</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setPrecision(prev => Math.max(2, prev - 1))}
+                  disabled={precision <= 2}
+                  className={`w-5 h-5 rounded flex items-center justify-center border font-bold text-xs select-none cursor-pointer transition-colors ${
+                    theme === 'light'
+                      ? 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed'
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed'
+                  }`}
+                  title="Decrease Decimal Precision"
+                >
+                  -
+                </button>
+                <span className="text-xs font-mono font-bold w-4 text-center">{precision}</span>
+                <button
+                  onClick={() => setPrecision(prev => Math.min(14, prev + 1))}
+                  disabled={precision >= 14}
+                  className={`w-5 h-5 rounded flex items-center justify-center border font-bold text-xs select-none cursor-pointer transition-colors ${
+                    theme === 'light'
+                      ? 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed'
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed'
+                  }`}
+                  title="Increase Decimal Precision"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -392,7 +431,7 @@ export function SidePanel() {
                 className={`flex-1 text-xs py-2 rounded-md font-bold text-white shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   isRolling 
                     ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-900/20' 
-                    : (theme === 'light' ? 'bg-zinc-850 hover:bg-zinc-750 shadow-zinc-200/50' : 'bg-zinc-700 hover:bg-zinc-600 shadow-zinc-900/20')
+                    : (theme === 'light' ? 'bg-zinc-800 hover:bg-zinc-700 shadow-zinc-200/50' : 'bg-zinc-700 hover:bg-zinc-600 shadow-zinc-900/20')
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                 disabled={rollingRules.length === 0 || rollingRules.some(r => r.pivotDiskIdx === null || r.rollingDiskIdx === null)}
                 onClick={() => setIsRolling(!isRolling)}
@@ -434,7 +473,7 @@ export function SidePanel() {
               if (isSelectedMode && !selectedDisks.has(idx)) return null;
               
               const isPinned = pinnedDisks.has(idx);
-              const currentInput = localInputs[idx] || { x: x.toFixed(6), y: y.toFixed(6) };
+              const currentInput = localInputs[idx] || { x: x.toFixed(precision), y: y.toFixed(precision) };
               const hasUndo = (undoStacks[idx] || []).length > 0;
               const hasRedo = (redoStacks[idx] || []).length > 0;
               
@@ -472,7 +511,7 @@ export function SidePanel() {
                         className={`transition-colors p-0.5 ${
                           hasUndo 
                             ? (theme === 'light' ? 'text-zinc-600 hover:text-zinc-900 cursor-pointer' : 'text-zinc-400 hover:text-zinc-200 cursor-pointer') 
-                            : (theme === 'light' ? 'text-zinc-200 cursor-not-allowed' : 'text-zinc-850 cursor-not-allowed')
+                            : (theme === 'light' ? 'text-zinc-200 cursor-not-allowed' : 'text-zinc-800 cursor-not-allowed')
                         }`}
                         title="Undo"
                       >
@@ -485,7 +524,7 @@ export function SidePanel() {
                         className={`transition-colors p-0.5 ${
                           hasRedo 
                             ? (theme === 'light' ? 'text-zinc-600 hover:text-zinc-900 cursor-pointer' : 'text-zinc-400 hover:text-zinc-200 cursor-pointer') 
-                            : (theme === 'light' ? 'text-zinc-200 cursor-not-allowed' : 'text-zinc-850 cursor-not-allowed')
+                            : (theme === 'light' ? 'text-zinc-200 cursor-not-allowed' : 'text-zinc-800 cursor-not-allowed')
                         }`}
                         title="Redo"
                       >

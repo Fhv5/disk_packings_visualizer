@@ -12,8 +12,8 @@ export function MainView() {
   const setSelectedClass = useAppStore(state => state.setSelectedClass);
   const theme = useAppStore(state => state.theme);
   const toggleTheme = useAppStore(state => state.toggleTheme);
-  const isAdvancedMode = useAppStore(state => state.isAdvancedMode);
-  const toggleAdvancedMode = useAppStore(state => state.toggleAdvancedMode);
+  const isAnalysisMode = useAppStore(state => state.isAnalysisMode);
+  const toggleAnalysisMode = useAppStore(state => state.toggleAnalysisMode);
   const goToNextConfig = useAppStore(state => state.goToNextConfig);
   const goToPrevConfig = useAppStore(state => state.goToPrevConfig);
   
@@ -200,17 +200,17 @@ export function MainView() {
         <div className="flex items-center gap-3">
           {selectedClass && (
             <button
-              onClick={toggleAdvancedMode}
+              onClick={toggleAnalysisMode}
               className={`text-[11px] uppercase tracking-wider font-bold px-3 py-1.5 rounded-lg border transition-all duration-200 cursor-pointer shadow-sm ${
-                isAdvancedMode
+                isAnalysisMode
                   ? 'bg-amber-600 hover:bg-amber-500 border-amber-600 text-white shadow-amber-900/20'
                   : theme === 'light'
                     ? 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 hover:text-zinc-800'
                     : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white'
               }`}
-              title="Toggle Advanced Analysis Overlay"
+              title="Toggle Analysis Overlay"
             >
-              Advanced Mode
+              Analysis
             </button>
           )}
           <button

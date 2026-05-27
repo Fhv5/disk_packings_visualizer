@@ -98,8 +98,8 @@ interface AppState {
   
   toggleGrid: () => void;
   toggleTheme: () => void;
-  isAdvancedMode: boolean;
-  toggleAdvancedMode: () => void;
+  isAnalysisMode: boolean;
+  toggleAnalysisMode: () => void;
   goToNextConfig: () => void;
   goToPrevConfig: () => void;
 }
@@ -387,8 +387,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   stepRoll: () => set((state) => ({ rollTrigger: state.rollTrigger + 1 })),
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
-  isAdvancedMode: false,
-  toggleAdvancedMode: () => set((state) => ({ isAdvancedMode: !state.isAdvancedMode })),
+  isAnalysisMode: false,
+  toggleAnalysisMode: () => set((state) => ({ isAnalysisMode: !state.isAnalysisMode })),
   goToNextConfig: () => {
     const filtered = get().getFilteredClasses();
     if (filtered.length <= 1) return;

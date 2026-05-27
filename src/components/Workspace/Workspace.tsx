@@ -30,7 +30,7 @@ function WorkspaceAnalysisPanel() {
 export function Workspace() {
   const activeWorkspace = useAppStore(state => state.activeWorkspace);
   const theme = useAppStore(state => state.theme);
-  const isAdvancedMode = useAppStore(state => state.isAdvancedMode);
+  const isAnalysisMode = useAppStore(state => state.isAnalysisMode);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(384); // 24rem = 384px default
 
@@ -78,8 +78,8 @@ export function Workspace() {
 
   return (
     <div className="flex h-full w-full relative">
-      {/* Advanced Mode Left Panel */}
-      {isAdvancedMode && (
+      {/* Analysis Mode Left Panel */}
+      {isAnalysisMode && (
         <div 
           style={{ width: leftPanelWidth }}
           className={`relative flex-shrink-0 shadow-xl overflow-hidden flex flex-col h-full border-r transition-colors duration-200 ${

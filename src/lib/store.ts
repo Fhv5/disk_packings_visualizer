@@ -98,6 +98,10 @@ interface AppState {
   
   toggleGrid: () => void;
   toggleTheme: () => void;
+  isAdvancedMode: boolean;
+  toggleAdvancedMode: () => void;
+  goToNextConfig: () => void;
+  goToPrevConfig: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -382,5 +386,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsRolling: (isRolling) => set({ isRolling }),
   stepRoll: () => set((state) => ({ rollTrigger: state.rollTrigger + 1 })),
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
-  toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' }))
+  toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
+  isAdvancedMode: false,
+  toggleAdvancedMode: () => set((state) => ({ isAdvancedMode: !state.isAdvancedMode })),
+  goToNextConfig: () => {
+    const filtered = get().getFilteredClasses();
+    if (filtered.length <= 1) return;
+    const selected = get().selectedClass;
+    if (!selected) return;
+    const idx = filtered.findIndex(c => c.id === selected.id);
+    if (idx === -1) return;
+    const nextIdx = (idx + 1) % filtered.length;
+    get().setSelectedClass(filtered[nextIdx]);
+  },
+  goToPrevConfig: () => {
+    const filtered = get().getFilteredClasses();
+    if (filtered.length <= 1) return;
+    const selected = get().selectedClass;
+    if (!selected) return;
+    const idx = filtered.findIndex(c => c.id === selected.id);
+    if (idx === -1) return;
+    const prevIdx = (idx - 1 + filtered.length) % filtered.length;
+    get().setSelectedClass(filtered[prevIdx]);
+  }
 }));

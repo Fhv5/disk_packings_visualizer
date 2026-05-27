@@ -322,8 +322,8 @@ export function WorkspaceCanvas() {
       
       if (isRolling) ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
       else if (isPivot) ctx.fillStyle = 'rgba(217, 70, 239, 0.15)';
-      else if (isSelected) ctx.fillStyle = theme === 'light' ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.2)';
-      else ctx.fillStyle = theme === 'light' ? 'rgba(0, 0, 0, 0.03)' : 'rgba(255, 255, 255, 0.08)';
+      else if (isSelected) ctx.fillStyle = theme === 'light' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.2)';
+      else ctx.fillStyle = theme === 'light' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.08)';
       ctx.fill();
       
       ctx.lineWidth = 2 / scale;
@@ -357,7 +357,7 @@ export function WorkspaceCanvas() {
         ctx.shadowBlur = 8 / scale;
         ctx.stroke();
       } else {
-        ctx.strokeStyle = theme === 'light' ? '#71717a' : '#a1a1aa';
+        ctx.strokeStyle = theme === 'light' ? '#8e8e93' : '#a1a1aa';
         ctx.shadowBlur = 0;
         ctx.stroke();
       }
@@ -461,13 +461,23 @@ export function WorkspaceCanvas() {
     return [wx, wy];
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomSensitivity = 0.001;
-    const delta = -e.deltaY * zoomSensitivity;
-    const newScale = Math.max(5, Math.min(500, scale * Math.exp(delta)));
-    setScale(newScale);
-  };
+  // Imperatively attach wheel listener with passive: false to prevent console errors
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomSensitivity = 0.001;
+      const delta = -e.deltaY * zoomSensitivity;
+      setScale(prev => Math.max(5, Math.min(500, prev * Math.exp(delta))));
+    };
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!workspace) return;
@@ -701,7 +711,6 @@ export function WorkspaceCanvas() {
     }`}>
       <canvas
         ref={canvasRef}
-        onWheel={handleWheel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

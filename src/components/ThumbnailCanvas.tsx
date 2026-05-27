@@ -86,9 +86,9 @@ export function ThumbnailCanvas({ centers, contacts, width = 200, height = 150 }
       centers.forEach(([x, y]) => {
         ctx.beginPath();
         ctx.arc(x, y, 1, 0, 2 * Math.PI);
-        ctx.fillStyle = isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.08)';
+        ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.08)';
         ctx.fill();
-        ctx.strokeStyle = isLight ? '#71717a' : '#a1a1aa';
+        ctx.strokeStyle = isLight ? '#8e8e93' : '#a1a1aa';
         ctx.lineWidth = 1.5 / scale;
         ctx.stroke();
       });

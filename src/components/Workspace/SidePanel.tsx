@@ -162,9 +162,10 @@ export function SidePanel() {
     <div className={`flex flex-col h-full border-l transition-colors duration-200 ${
       theme === 'light' ? 'bg-zinc-50 border-zinc-200 text-zinc-700' : 'bg-zinc-900 border-zinc-800 text-zinc-300'
     }`}>
-      <div className={`p-4 border-b flex-shrink-0 transition-colors duration-200 ${
-        theme === 'light' ? 'border-zinc-200 bg-white/50' : 'border-zinc-800 bg-zinc-900/50'
-      }`}>
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className={`p-4 border-b transition-colors duration-200 ${
+          theme === 'light' ? 'border-zinc-200 bg-white/50' : 'border-zinc-800 bg-zinc-900/50'
+        }`}>
         <div className="flex justify-between items-center cursor-pointer group mb-1" onClick={() => setShowMetrics(!showMetrics)}>
           <h2 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
             theme === 'light' ? 'text-zinc-500 group-hover:text-zinc-800' : 'text-zinc-400 group-hover:text-zinc-300'
@@ -251,7 +252,7 @@ export function SidePanel() {
         )}
       </div>
 
-      <div className={`p-4 border-b flex-shrink-0 transition-colors duration-200 ${
+      <div className={`p-4 border-b transition-colors duration-200 ${
         theme === 'light' ? 'border-zinc-200' : 'border-zinc-800'
       }`}>
         <div className="flex justify-between items-center cursor-pointer group" onClick={() => setShowHistory(!showHistory)}>
@@ -456,8 +457,8 @@ export function SidePanel() {
         )}
       </div>
 
-      <div className={`flex-1 overflow-y-auto p-4 border-t custom-scrollbar transition-colors duration-200 ${
-        theme === 'light' ? 'border-zinc-200 bg-white/50' : 'border-zinc-800'
+      <div className={`p-4 transition-colors duration-200 ${
+        theme === 'light' ? 'bg-white/50' : ''
       }`}>
         <h3 className={`text-xs font-bold uppercase tracking-wider mb-3 cursor-pointer flex items-center gap-1.5 group transition-colors ${
           theme === 'light' ? 'text-zinc-500 group-hover:text-zinc-800' : 'text-zinc-400 group-hover:text-zinc-300'
@@ -578,6 +579,7 @@ export function SidePanel() {
             })}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

@@ -1,3 +1,11 @@
+import type { MathNode } from 'mathjs';
+
+export interface ParsedCoordinate {
+  floatValue: number;
+  symbolicAst: MathNode;
+  _evaluatedBig?: any;
+}
+
 export type Coordinate = number | string;
 export type ContactPair = [number, number];
 
@@ -19,7 +27,7 @@ export interface PackingFileJSON {
 export interface ParsedContactClass {
   id: string;
   disksCount: number;
-  centers: [number, number][];
+  centers: [ParsedCoordinate, ParsedCoordinate][];
   contacts: [number, number][];
   dof: number;
   fileName: string;

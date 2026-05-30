@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { AnalysisResult } from '@/lib/analysis/types';
 import { CollapsibleSection } from './CollapsibleSection';
 import { MatrixDisplay, toSymbolicLaTeX } from './MatrixDisplay';
@@ -19,6 +19,14 @@ export function AnalysisPanel({ result, loading, error }: AnalysisPanelProps) {
   const [showSymbolicDisks, setShowSymbolicDisks] = useState(true);
   const theme = useAppStore(state => state.theme);
   const isLight = theme === 'light';
+
+  const criticalityTolerance = useAppStore(state => state.criticalityTolerance);
+  const setCriticalityTolerance = useAppStore(state => state.setCriticalityTolerance);
+  const [toleranceInput, setToleranceInput] = useState(criticalityTolerance.toExponential());
+
+  useEffect(() => {
+    setToleranceInput(criticalityTolerance.toExponential());
+  }, [criticalityTolerance]);
 
   const hull = useMemo(() => {
     if (!result) return [];
@@ -186,6 +194,70 @@ export function AnalysisPanel({ result, loading, error }: AnalysisPanelProps) {
               Graph Status: {graphValidation.message}
             </div>
           )}
+
+          {/* Tolerance control */}
+          <div className={`col-span-2 flex justify-between items-center border-t pt-2 mt-1.5 ${
+            isLight ? 'border-zinc-100' : 'border-zinc-800/60'
+          }`}>
+            <span className={isLight ? 'text-zinc-400' : 'text-zinc-500'}>Criticality Tolerance</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  const exponent = Math.round(Math.log10(criticalityTolerance));
+                  const nextExponent = Math.max(-15, exponent - 1);
+                  setCriticalityTolerance(Math.pow(10, nextExponent));
+                }}
+                disabled={criticalityTolerance <= 1e-15}
+                className={`w-5 h-5 rounded flex items-center justify-center border font-bold text-xs select-none cursor-pointer transition-colors ${
+                  isLight
+                    ? 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed'
+                }`}
+                title="Stricter Tolerance (decrease by 10x)"
+              >
+                -
+              </button>
+              <input
+                type="text"
+                value={toleranceInput}
+                onChange={(e) => setToleranceInput(e.target.value)}
+                onBlur={() => {
+                  const val = parseFloat(toleranceInput);
+                  if (!isNaN(val) && val > 0 && val <= 1.0) {
+                    setCriticalityTolerance(val);
+                    setToleranceInput(val.toExponential());
+                  } else {
+                    setToleranceInput(criticalityTolerance.toExponential());
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                  }
+                }}
+                className={`text-xs font-mono font-bold w-20 text-center bg-transparent border-b border-dashed border-zinc-400 focus:border-solid focus:border-amber-500 focus:outline-none focus:ring-0 px-0.5 py-0 ${
+                  isLight ? 'text-zinc-700' : 'text-zinc-300'
+                }`}
+                title="Criticality tolerance threshold (e.g., 1e-6). Click to edit."
+              />
+              <button
+                onClick={() => {
+                  const exponent = Math.round(Math.log10(criticalityTolerance));
+                  const nextExponent = Math.min(0, exponent + 1);
+                  setCriticalityTolerance(Math.pow(10, nextExponent));
+                }}
+                disabled={criticalityTolerance >= 1.0}
+                className={`w-5 h-5 rounded flex items-center justify-center border font-bold text-xs select-none cursor-pointer transition-colors ${
+                  isLight
+                    ? 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed'
+                }`}
+                title="Looser Tolerance (increase by 10x)"
+              >
+                +
+              </button>
+            </div>
+          </div>
         </div>
       </CollapsibleSection>
 

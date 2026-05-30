@@ -45,9 +45,9 @@ export function ExportModal({ onClose }: ExportModalProps) {
       if (includeStructure) {
         graph.discos = source.disksCount;
         graph.nombre = source.id;
-        graph.centros = source.centers.map((c: Point2D) => [
-          Number(c[0].toFixed(15)),
-          Number(c[1].toFixed(15))
+        graph.centros = source.centers.map((c) => [
+          Number(c[0].floatValue.toFixed(15)),
+          Number(c[1].floatValue.toFixed(15))
         ]);
         graph.contactos = source.contacts;
       }
@@ -57,7 +57,8 @@ export function ExportModal({ onClose }: ExportModalProps) {
       }
       
       if (includeHullVertices || includePerimeter) {
-        const hull = convexHull(source.centers as Point2D[]);
+        const floatCenters = source.centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
+        const hull = convexHull(floatCenters);
         if (includeHullVertices) {
           graph.hullVertices = hull.length;
         }

@@ -1,13 +1,50 @@
 'use client';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Pin, Undo2, Redo2, RotateCcw, ChevronDown, ChevronRight, Play, Pause, Plus, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { convexHull, calculatePerimeter, getSymbolicPerimeter, Point2D } from '@/lib/geometry';
-import { evaluateMath } from '@/lib/parser';
+import { exactPerimeter } from '@/lib/analysis/perimeter';
+import { evaluateMath, getEvaluatedBig } from '@/lib/parser';
+import { math } from '@/lib/math';
+import type { ParsedCoordinate } from '@/lib/types';
+
+function formatCoordinate(coord: ParsedCoordinate, precision: number, isRolling: boolean = false): string {
+  if (isRolling) {
+    return coord.floatValue.toFixed(precision);
+  }
+  try {
+    const val = getEvaluatedBig(coord);
+    const type = math.typeOf(val);
+    if (type === 'BigNumber') {
+      return (val as any).toFixed(precision);
+    } else if (type === 'Fraction') {
+      return math.bignumber(val).toFixed(precision);
+    } else if (typeof val === 'number') {
+      return math.bignumber(val).toFixed(precision);
+    }
+    return coord.floatValue.toFixed(precision);
+  } catch {
+    return coord.floatValue.toFixed(precision);
+  }
+}
 
 export function SidePanel() {
   const workspace = useAppStore(state => state.activeWorkspace);
   const theme = useAppStore(state => state.theme);
+  const isSelfUpdatingRef = useRef(false);
+  const lastCentersRef = useRef(workspace?.centers);
+
+  useEffect(() => {
+    if (!workspace) return;
+    
+    if (workspace.centers !== lastCentersRef.current) {
+      if (!isSelfUpdatingRef.current) {
+        setLocalInputs(prev => Object.keys(prev).length === 0 ? prev : {});
+      }
+      lastCentersRef.current = workspace.centers;
+    }
+    isSelfUpdatingRef.current = false;
+  }, [workspace?.centers]);
   const updateWorkspaceCenters = useAppStore(state => state.updateWorkspaceCenters);
   const pinnedDisks = useAppStore(state => state.pinnedDisks);
   const togglePin = useAppStore(state => state.togglePin);
@@ -24,6 +61,8 @@ export function SidePanel() {
   const clearRollingRules = useAppStore(state => state.clearRollingRules);
   const setIsRolling = useAppStore(state => state.setIsRolling);
   const stepRoll = useAppStore(state => state.stepRoll);
+  const stopOnCritical = useAppStore(state => state.stopOnCritical);
+  const setStopOnCritical = useAppStore(state => state.setStopOnCritical);
 
   const selectedClass = useAppStore(state => state.selectedClass);
   const selectedDisks = useAppStore(state => state.selectedDisks);
@@ -38,9 +77,11 @@ export function SidePanel() {
 
   const [localInputs, setLocalInputs] = useState<Record<number, { x: string; y: string }>>({});
   const [precision, setPrecision] = useState(6);
+  const [precisionInput, setPrecisionInput] = useState('6');
 
   useEffect(() => {
     setLocalInputs({});
+    setPrecisionInput(precision.toString());
   }, [precision]);
 
   const [showHistory, setShowHistory] = useState(true);
@@ -49,15 +90,31 @@ export function SidePanel() {
   const [showMotors, setShowMotors] = useState(true);
   const [showSymbolicPerimeter, setShowSymbolicPerimeter] = useState(true);
 
+  const metricsRef = useRef<{ perimeter: any, hullVertices: number, symbolicPerimeter: any }>({ perimeter: 0, hullVertices: 0, symbolicPerimeter: null });
+  const lastMetricsTimeRef = useRef(0);
+
   const metrics = useMemo(() => {
     if (!workspace) return { perimeter: 0, hullVertices: 0, symbolicPerimeter: null };
-    const hull = convexHull(workspace.centers as Point2D[]);
-    return {
-      perimeter: calculatePerimeter(hull),
+    
+    const floatCenters = workspace.centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
+    const hull = convexHull(floatCenters);
+
+    if (isRolling) {
+      return {
+        perimeter: calculatePerimeter(hull),
+        hullVertices: hull.length,
+        symbolicPerimeter: getSymbolicPerimeter(hull)
+      };
+    }
+    
+    const result = {
+      perimeter: exactPerimeter(workspace.centers as [ParsedCoordinate, ParsedCoordinate][]),
       hullVertices: hull.length,
       symbolicPerimeter: getSymbolicPerimeter(hull)
     };
-  }, [workspace]);
+    metricsRef.current = result;
+    return result;
+  }, [workspace, isRolling]);
 
   if (!workspace) return null;
 
@@ -67,8 +124,8 @@ export function SidePanel() {
 
   const handleCoordinateChange = (idx: number, type: 'x' | 'y', value: string) => {
     const currentInput = localInputs[idx] || {
-      x: workspace.centers[idx][0].toFixed(precision),
-      y: workspace.centers[idx][1].toFixed(precision)
+      x: formatCoordinate(workspace.centers[idx][0], precision, isRolling),
+      y: formatCoordinate(workspace.centers[idx][1], precision, isRolling)
     };
     const updated = { ...currentInput, [type]: value };
     setLocalInputs({
@@ -80,12 +137,14 @@ export function SidePanel() {
       const px = evaluateMath(updated.x);
       const py = evaluateMath(updated.y);
       if (!isNaN(px) && !isNaN(py)) {
-        const newCenters = [...workspace.centers];
-        newCenters[idx] = [px, py];
-        updateWorkspaceCenters(newCenters);
-        
-        const hull = convexHull(newCenters as Point2D[]);
-        pushPerimeterHistory(calculatePerimeter(hull));
+        const parsedCenters = [...workspace.centers];
+        parsedCenters[idx] = [
+          { floatValue: px, symbolicAst: math.parse(updated.x) },
+          { floatValue: py, symbolicAst: math.parse(updated.y) }
+        ];
+        isSelfUpdatingRef.current = true;
+        updateWorkspaceCenters(parsedCenters);
+        pushPerimeterHistory(Number(exactPerimeter(parsedCenters)));
       }
     } catch (e) {
     }
@@ -233,10 +292,38 @@ export function SidePanel() {
                 >
                   -
                 </button>
-                <span className="text-xs font-mono font-bold w-4 text-center">{precision}</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={precisionInput}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, '');
+                    setPrecisionInput(val);
+                  }}
+                  onBlur={() => {
+                    const parsed = parseInt(precisionInput, 10);
+                    if (!isNaN(parsed)) {
+                      const clamped = Math.max(2, Math.min(64, parsed));
+                      setPrecision(clamped);
+                      setPrecisionInput(clamped.toString());
+                    } else {
+                      setPrecisionInput(precision.toString());
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  className={`text-xs font-mono font-bold w-8 text-center bg-transparent border-b border-dashed border-zinc-400 focus:border-solid focus:border-amber-500 focus:outline-none focus:ring-0 px-0.5 py-0 ${
+                    theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'
+                  }`}
+                  title="Decimal precision (2-64). Click to edit."
+                />
                 <button
-                  onClick={() => setPrecision(prev => Math.min(14, prev + 1))}
-                  disabled={precision >= 14}
+                  onClick={() => setPrecision(prev => Math.min(64, prev + 1))}
+                  disabled={precision >= 64}
                   className={`w-5 h-5 rounded flex items-center justify-center border font-bold text-xs select-none cursor-pointer transition-colors ${
                     theme === 'light'
                       ? 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed'
@@ -424,6 +511,34 @@ export function SidePanel() {
                 </div>
               )}
             </div>
+
+            {/* Auto-stop on critical toggle */}
+            <div className="flex items-center gap-3 mb-3 mt-1.5 px-1.5 py-1">
+              <button
+                type="button"
+                onClick={() => setStopOnCritical(!stopOnCritical)}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full p-0.5 items-center transition-colors duration-200 ease-in-out focus:outline-none ${
+                  stopOnCritical 
+                    ? 'bg-amber-600' 
+                    : (theme === 'light' ? 'bg-zinc-300' : 'bg-zinc-700')
+                }`}
+                title="Toggle Auto-stop on Critical Point"
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out ${
+                    stopOnCritical ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span 
+                onClick={() => setStopOnCritical(!stopOnCritical)}
+                className={`text-xs font-semibold cursor-pointer select-none transition-colors ${
+                  theme === 'light' ? 'text-zinc-600 hover:text-zinc-800' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Auto-stop on Critical Point
+              </span>
+            </div>
             
             <div className={`flex gap-2 pt-3 border-t mt-2 transition-colors duration-200 ${
               theme === 'light' ? 'border-zinc-200' : 'border-zinc-800'
@@ -474,7 +589,7 @@ export function SidePanel() {
               if (isSelectedMode && !selectedDisks.has(idx)) return null;
               
               const isPinned = pinnedDisks.has(idx);
-              const currentInput = localInputs[idx] || { x: x.toFixed(precision), y: y.toFixed(precision) };
+              const currentInput = localInputs[idx] || { x: formatCoordinate(x, precision, isRolling), y: formatCoordinate(y, precision, isRolling) };
               const hasUndo = (undoStacks[idx] || []).length > 0;
               const hasRedo = (redoStacks[idx] || []).length > 0;
               

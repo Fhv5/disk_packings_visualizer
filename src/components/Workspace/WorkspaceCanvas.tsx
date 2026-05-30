@@ -2,7 +2,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { convexHull, Point2D, getBoundingBox, calculatePerimeter } from '@/lib/geometry';
-import { CONTACT_DISTANCE, TOLERANCE } from '@/lib/parser';
+import { CONTACT_DISTANCE, TOLERANCE, getEvaluatedBig } from '@/lib/parser';
+import { math } from '@/lib/math';
+import { ParsedCoordinate } from '@/lib/types';
+import { exactPerimeter } from '@/lib/analysis/perimeter';
 
 export function WorkspaceCanvas() {
   const workspace = useAppStore(state => state.activeWorkspace);
@@ -39,11 +42,17 @@ export function WorkspaceCanvas() {
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const isInitialFitRef = useRef(true);
 
+  // Refs for decoupling animation from React render cycle
+  const rollingCentersRef = useRef<any>(null);
+  const lastStoreSyncRef = useRef(0);
+  const STORE_SYNC_INTERVAL_MS = 100;
+
 
   const fitToView = useCallback(() => {
     const currentWorkspace = useAppStore.getState().activeWorkspace;
     if (!currentWorkspace || !canvasRef.current) return;
-    const { minX, minY, maxX, maxY } = getBoundingBox(currentWorkspace.centers as Point2D[]);
+    const floatCenters = currentWorkspace.centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
+    const { minX, minY, maxX, maxY } = getBoundingBox(floatCenters);
     
     const pMinX = minX - 2;
     const pMinY = minY - 2;
@@ -79,7 +88,10 @@ export function WorkspaceCanvas() {
     
     if (!currentWorkspace || rules.length === 0) return;
     
-    const centers = [...currentWorkspace.centers] as Point2D[];
+    // Read from the live rolling ref if available, otherwise from the store
+    const sourceCenters = rollingCentersRef.current || currentWorkspace.centers;
+    const parsedCenters = [...sourceCenters];
+    const centers = parsedCenters.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
     let anyCollision = false;
 
     for (const rule of rules) {
@@ -90,28 +102,34 @@ export function WorkspaceCanvas() {
       
       if (rIdx === null || pIdx === null || rIdx === pIdx) continue;
 
-      const pivot = centers[pIdx];
-      const roll = centers[rIdx];
+      const pivotCoord = parsedCenters[pIdx];
+      const rollCoord = parsedCenters[rIdx];
       
-      const currentAngle = Math.atan2(roll[1] - pivot[1], roll[0] - pivot[0]);
-      const angleStep = rule.speed * rule.direction * (deltaTimeMs / 1000.0);
-      const nextAngle = currentAngle + angleStep;
+      const px = getEvaluatedBig(pivotCoord[0]);
+      const py = getEvaluatedBig(pivotCoord[1]);
+      const rx = getEvaluatedBig(rollCoord[0]);
+      const ry = getEvaluatedBig(rollCoord[1]);
       
-      const targetPos: Point2D = [
-        pivot[0] + CONTACT_DISTANCE * Math.cos(nextAngle),
-        pivot[1] + CONTACT_DISTANCE * Math.sin(nextAngle)
-      ];
+      const currentAngleBig = math.atan2(math.subtract(ry, py) as any, math.subtract(rx, px) as any) as any;
+      const angleStepBig = math.bignumber(rule.speed * rule.direction * (deltaTimeMs / 1000.0)) as any;
+      const nextAngleBig = math.add(currentAngleBig, angleStepBig) as any;
+      
+      const cd = math.bignumber(CONTACT_DISTANCE) as any;
+      const targetPx = math.add(px, math.multiply(cd, math.cos(nextAngleBig) as any) as any) as any;
+      const targetPy = math.add(py, math.multiply(cd, math.sin(nextAngleBig) as any) as any) as any;
+      
+      const targetPosFloat: Point2D = [Number(targetPx), Number(targetPy)];
       
       let collisionOccurred = false;
       for (let i = 0; i < centers.length; i++) {
         if (i === rIdx || i === pIdx) continue;
         
-        const dx = targetPos[0] - centers[i][0];
-        const dy = targetPos[1] - centers[i][1];
+        const dx = targetPosFloat[0] - centers[i][0];
+        const dy = targetPosFloat[1] - centers[i][1];
         const d = Math.sqrt(dx * dx + dy * dy);
         
-        const currentDx = roll[0] - centers[i][0];
-        const currentDy = roll[1] - centers[i][1];
+        const currentDx = centers[rIdx][0] - centers[i][0];
+        const currentDy = centers[rIdx][1] - centers[i][1];
         const currentDist = Math.sqrt(currentDx * currentDx + currentDy * currentDy);
         
         if (d < CONTACT_DISTANCE - TOLERANCE && d < currentDist) {
@@ -125,18 +143,33 @@ export function WorkspaceCanvas() {
          break;
       }
       
-      centers[rIdx] = targetPos;
+      centers[rIdx] = targetPosFloat;
+      
+      const sx = math.parse(targetPx.toString());
+      const sy = math.parse(targetPy.toString());
+      
+      parsedCenters[rIdx] = [
+        { floatValue: targetPosFloat[0], symbolicAst: sx },
+        { floatValue: targetPosFloat[1], symbolicAst: sy }
+      ] as [ParsedCoordinate, ParsedCoordinate];
     }
     
     if (anyCollision) {
        if (isRollingState) state.setIsRolling(false);
-       state.updateWorkspaceCenters(centers);
+       rollingCentersRef.current = null;
+       lastStoreSyncRef.current = 0;
+       state.updateWorkspaceCenters(parsedCenters);
        return; 
     }
     
-    state.updateWorkspaceCenters(centers);
-    const hull = convexHull(centers);
-    state.pushPerimeterHistory(calculatePerimeter(hull));
+    // Update ref for immediate canvas rendering (60fps, no React re-render)
+    rollingCentersRef.current = parsedCenters;
+    
+    // Sync positions to store every frame for smooth coordinate updates
+    state.updateWorkspaceCenters(parsedCenters);
+    
+    // Push perimeter history every frame for smooth chart plotting using fast float calculations
+    state.pushPerimeterHistory(calculatePerimeter(convexHull(centers)));
     
   }, []);
 
@@ -145,10 +178,14 @@ export function WorkspaceCanvas() {
     let lastTime: number | null = null;
     
     const loop = (time: number) => {
-      if (isRolling) {
+      const liveRolling = useAppStore.getState().isRolling;
+      if (liveRolling) {
         if (lastTime !== null) {
           const deltaTimeMs = time - lastTime;
-          performRollStep(Math.min(deltaTimeMs, 50)); 
+          performRollStep(Math.min(deltaTimeMs, 50));
+          // Draw canvas directly from the ref for smooth 60fps animation
+          // without triggering React re-renders
+          renderRef.current();
         }
         lastTime = time;
         animationFrameId = requestAnimationFrame(loop);
@@ -164,6 +201,18 @@ export function WorkspaceCanvas() {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
   }, [isRolling, performRollStep]);
+
+  // Sync final rolling positions to the store when rolling stops
+  useEffect(() => {
+    if (!isRolling && rollingCentersRef.current) {
+      const finalCenters = rollingCentersRef.current;
+      rollingCentersRef.current = null;
+      lastStoreSyncRef.current = 0;
+      const state = useAppStore.getState();
+      state.updateWorkspaceCenters(finalCenters);
+      state.pushPerimeterHistory(Number(exactPerimeter(finalCenters)));
+    }
+  }, [isRolling]);
 
   useEffect(() => {
     if (rollTrigger > 0) {
@@ -223,7 +272,9 @@ export function WorkspaceCanvas() {
       ctx.stroke();
     }
 
-    const centers = workspace.centers as Point2D[];
+    // Use rolling ref for smooth animation during rolling, fallback to store
+    const centersSource = rollingCentersRef.current || workspace.centers;
+    const centers = centersSource.map(([x, y]: any) => [x.floatValue, y.floatValue]) as Point2D[];
     const contacts = workspace.contacts;
     const hull = convexHull(centers);
 
@@ -487,7 +538,7 @@ export function WorkspaceCanvas() {
     lastMouseRef.current = { x: e.clientX, y: e.clientY };
     hasDraggedRef.current = false;
 
-    const centers = workspace.centers as Point2D[];
+    const centers = workspace.centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
     let clickedIdx: number | null = null;
     for (let i = centers.length - 1; i >= 0; i--) {
       const dx = centers[i][0] - wx;
@@ -536,7 +587,7 @@ export function WorkspaceCanvas() {
       hasDraggedRef.current = true;
       const targetPos = screenToWorld(e.clientX, e.clientY);
       const draggedIdx = draggedDiskRef.current;
-      const centers = workspace.centers as Point2D[];
+      const centers = workspace.centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
       const oldPos = centers[draggedIdx];
       
       const dxTotal = targetPos[0] - oldPos[0];
@@ -589,7 +640,7 @@ export function WorkspaceCanvas() {
       nearbyDisks.sort((a, b) => a.dist - b.dist);
       
       let snapped = false;
-
+ 
       if (nearbyDisks.length >= 2) {
         const c1 = centers[nearbyDisks[0].idx];
         const c2 = centers[nearbyDisks[1].idx];
@@ -672,7 +723,8 @@ export function WorkspaceCanvas() {
     isPanningRef.current = false;
     
     if (draggedDiskRef.current !== null && workspace && hasDraggedRef.current) {
-      const hull = convexHull(workspace.centers as Point2D[]);
+      const floatCenters = workspace.centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
+      const hull = convexHull(floatCenters);
       const p = calculatePerimeter(hull);
       pushPerimeterHistory(p);
     }

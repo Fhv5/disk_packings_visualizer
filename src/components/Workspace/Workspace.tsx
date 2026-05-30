@@ -5,6 +5,7 @@ import { SidePanel } from './SidePanel';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
 import { useAnalysis } from '@/lib/analysis/useAnalysis';
 import { AnalysisPanel } from '../Analysis/AnalysisPanel';
+import { RotateCcw } from 'lucide-react';
 
 function WorkspaceAnalysisPanel() {
   const activeWorkspace = useAppStore(state => state.activeWorkspace);
@@ -33,20 +34,22 @@ export function Workspace() {
   const isAnalysisMode = useAppStore(state => state.isAnalysisMode);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(384); // 24rem = 384px default
+  const [rightPanelWidth, setRightPanelWidth] = useState(320); // 20rem = 320px default
+  const [isDraggingRight, setIsDraggingRight] = useState(false);
 
   // Keep left panel width within limits when window resizes or right panel state toggles
   useEffect(() => {
     const handleResize = () => {
-      const rightPanelWidth = isPanelOpen ? 320 : 0;
+      const rightW = isPanelOpen ? rightPanelWidth : 0;
       const minWidth = 280;
-      const maxWidth = window.innerWidth - rightPanelWidth;
+      const maxWidth = window.innerWidth - rightW;
       setLeftPanelWidth(prev => Math.max(minWidth, Math.min(prev, maxWidth)));
     };
 
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [isPanelOpen]);
+  }, [isPanelOpen, rightPanelWidth]);
 
   if (!activeWorkspace) return null;
 
@@ -60,8 +63,8 @@ export function Workspace() {
       const newWidth = startWidth + deltaX;
 
       const minWidth = 280;
-      const rightPanelWidth = isPanelOpen ? 320 : 0; // 320px is 20rem
-      const maxWidth = window.innerWidth - rightPanelWidth;
+      const rightW = isPanelOpen ? rightPanelWidth : 0;
+      const maxWidth = window.innerWidth - rightW;
 
       const clampedWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
       setLeftPanelWidth(clampedWidth);
@@ -70,10 +73,42 @@ export function Workspace() {
     const handlePointerUp = () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  };
+
+  const handleRightResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault();
+    setIsDraggingRight(true);
+    const startX = e.clientX;
+    const startWidth = rightPanelWidth;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = startX - moveEvent.clientX;
+      const newWidth = startWidth + deltaX;
+
+      const minWidth = 280;
+      const leftW = isAnalysisMode ? leftPanelWidth : 0;
+      const maxWidth = window.innerWidth - leftW;
+
+      const clampedWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+      setRightPanelWidth(clampedWidth);
+    };
+
+    const handlePointerUp = () => {
+      setIsDraggingRight(false);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
   };
 
   return (
@@ -92,9 +127,21 @@ export function Workspace() {
           
           {/* Resize Handle */}
           <div 
-            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-amber-500/85 active:bg-amber-600 transition-colors duration-150 z-30"
+            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-amber-500/85 active:bg-amber-600 transition-colors duration-150 z-30 group"
             onPointerDown={handleResizeStart}
-          />
+            onDoubleClick={() => setLeftPanelWidth(384)}
+            title="Drag to resize, double-click to reset"
+          >
+            {leftPanelWidth !== 384 && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); setLeftPanelWidth(384); }}
+                className="absolute top-3 right-3 bg-white dark:bg-zinc-800 shadow-md p-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-amber-500 hover:border-amber-500 transition-all opacity-0 group-hover:opacity-100"
+                title="Reset left panel width"
+              >
+                <RotateCcw size={12} />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -106,12 +153,12 @@ export function Workspace() {
 
       <button
         onClick={() => setIsPanelOpen(!isPanelOpen)}
-        className={`absolute top-6 right-0 -translate-y-1/2 -translate-x-full z-10 p-1.5 rounded-l-md transition-all duration-200 shadow-md cursor-pointer border ${
+        className={`absolute top-6 right-0 -translate-y-1/2 -translate-x-full z-10 p-1.5 rounded-l-md shadow-md cursor-pointer border ${
           theme === 'light'
             ? 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800'
             : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-white'
-        }`}
-        style={{ right: isPanelOpen ? '20rem' : '0' }}
+        } ${isDraggingRight ? '' : 'transition-all duration-200'}`}
+        style={{ right: isPanelOpen ? rightPanelWidth : 0 }}
         title={isPanelOpen ? "Collapse Panel" : "Expand Panel"}
       >
         {isPanelOpen ? (
@@ -122,15 +169,38 @@ export function Workspace() {
       </button>
 
       <div 
-        className={`flex-shrink-0 shadow-xl overflow-hidden flex flex-col transition-all duration-300 border-l ${
+        className={`relative flex-shrink-0 shadow-xl overflow-hidden flex flex-col border-l ${
           theme === 'light'
             ? 'bg-white border-zinc-200'
             : 'bg-zinc-900 border-zinc-800'
-        } ${isPanelOpen ? 'w-80' : 'w-0'}`}
+        } ${!isPanelOpen ? 'w-0 border-none' : ''} ${
+          isDraggingRight ? '' : 'transition-all duration-300'
+        }`}
+        style={isPanelOpen ? { width: rightPanelWidth } : { width: 0 }}
       >
-        <div className="w-80 h-full flex flex-col">
-          <SidePanel />
+        <div className="h-full flex flex-col" style={{ width: isPanelOpen ? rightPanelWidth : 0 }}>
+          {isPanelOpen && <SidePanel />}
         </div>
+        
+        {/* Resize Handle for Right Panel */}
+        {isPanelOpen && (
+          <div 
+            className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize hover:bg-amber-500/85 active:bg-amber-600 transition-colors duration-150 z-30 group"
+            onPointerDown={handleRightResizeStart}
+            onDoubleClick={() => setRightPanelWidth(320)}
+            title="Drag to resize, double-click to reset"
+          >
+            {rightPanelWidth !== 320 && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); setRightPanelWidth(320); }}
+                className="absolute top-3 left-3 bg-white dark:bg-zinc-800 shadow-md p-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-amber-500 hover:border-amber-500 transition-all opacity-0 group-hover:opacity-100"
+                title="Reset right panel width"
+              >
+                <RotateCcw size={12} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

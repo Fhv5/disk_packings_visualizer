@@ -1,13 +1,20 @@
 import { Matrix, SVD, EigenvalueDecomposition } from 'ml-matrix';
 import { Configuration, HessianResult } from './types';
-import { convexHullIndices, isCollinear, perimeterGradient } from './perimeter';
+import { convexHullIndices, isCollinearBig, perimeterGradient } from './perimeter';
 import { buildContactMatrix } from './constraints';
+import { math } from '../math';
+import { getEvaluatedBig } from '../parser';
 
-export function computeEdgeBlock(t: [number, number], dist: number): number[][] {
+export function computeEdgeBlockBig(t: [any, any], dist: any): any[][] {
   const tx = t[0], ty = t[1];
+  const one = math.bignumber(1) as any;
+  const b00 = math.divide(math.subtract(one, math.multiply(tx, tx) as any) as any, dist) as any;
+  const b01 = math.divide(math.multiply(math.unaryMinus(tx) as any, ty) as any, dist) as any;
+  const b10 = b01;
+  const b11 = math.divide(math.subtract(one, math.multiply(ty, ty) as any) as any, dist) as any;
   return [
-    [(1 - tx * tx) / dist, (-tx * ty) / dist],
-    [(-tx * ty) / dist, (1 - ty * ty) / dist],
+    [b00, b01],
+    [b10, b11]
   ];
 }
 
@@ -21,29 +28,37 @@ export function addBlock(H: number[][], block: number[][], row: number, col: num
 export function buildEuclideanHessian(config: Configuration): number[][] {
   const dim = 2 * config.n;
   const H = Array.from({ length: dim }, () => new Array(dim).fill(0));
-  const hull = convexHullIndices(config.positions);
+  const hull = convexHullIndices(config.symbolicPositions);
 
-  if (isCollinear(config.positions)) {
-    let maxDist = 0, endA = hull[0], endB = hull[1];
+  if (isCollinearBig(config.symbolicPositions)) {
+    let maxDist = math.bignumber(0) as any, endA = hull[0], endB = hull[1];
     for (let i = 0; i < hull.length; i++) {
       for (let j = i + 1; j < hull.length; j++) {
-        const pi = config.positions[hull[i]];
-        const pj = config.positions[hull[j]];
-        const d = Math.sqrt((pj[0] - pi[0]) ** 2 + (pj[1] - pi[1]) ** 2);
-        if (d > maxDist) { maxDist = d; endA = hull[i]; endB = hull[j]; }
+        const pi = config.symbolicPositions[hull[i]];
+        const pj = config.symbolicPositions[hull[j]];
+        const dx = math.subtract(getEvaluatedBig(pj[0]), getEvaluatedBig(pi[0])) as any;
+        const dy = math.subtract(getEvaluatedBig(pj[1]), getEvaluatedBig(pi[1])) as any;
+        const d = math.sqrt(math.add(math.multiply(dx, dx) as any, math.multiply(dy, dy) as any) as any) as any;
+        if (math.larger(d, maxDist) as any) {
+          maxDist = d;
+          endA = hull[i];
+          endB = hull[j];
+        }
       }
     }
 
-    if (maxDist > 1e-15) {
-      const dx = config.positions[endB][0] - config.positions[endA][0];
-      const dy = config.positions[endB][1] - config.positions[endA][1];
-      const t: [number, number] = [dx / maxDist, dy / maxDist];
-      const block = computeEdgeBlock(t, maxDist);
-      const scaledBlock = block.map(r => r.map(v => 2 * v));
-      addBlock(H, scaledBlock, endA, endA, 1);
-      addBlock(H, scaledBlock, endB, endB, 1);
-      addBlock(H, scaledBlock, endA, endB, -1);
-      addBlock(H, scaledBlock, endB, endA, -1);
+    if (math.larger(maxDist, math.bignumber(1e-15) as any) as any) {
+      const dx = math.subtract(getEvaluatedBig(config.symbolicPositions[endB][0]), getEvaluatedBig(config.symbolicPositions[endA][0])) as any;
+      const dy = math.subtract(getEvaluatedBig(config.symbolicPositions[endB][1]), getEvaluatedBig(config.symbolicPositions[endA][1])) as any;
+      const t: [any, any] = [math.divide(dx, maxDist) as any, math.divide(dy, maxDist) as any];
+      const blockBig = computeEdgeBlockBig(t, maxDist);
+      const scaledBlock = blockBig.map(r => r.map(v => math.multiply(math.bignumber(2) as any, v) as any));
+      const floatBlock = scaledBlock.map(r => r.map(v => typeof v === 'object' && v && 'toNumber' in v ? v.toNumber() : Number(v)));
+      
+      addBlock(H, floatBlock, endA, endA, 1);
+      addBlock(H, floatBlock, endB, endB, 1);
+      addBlock(H, floatBlock, endA, endB, -1);
+      addBlock(H, floatBlock, endB, endA, -1);
     }
     return H;
   }
@@ -51,17 +66,19 @@ export function buildEuclideanHessian(config: Configuration): number[][] {
   for (let k = 0; k < hull.length; k++) {
     const u = hull[k];
     const v = hull[(k + 1) % hull.length];
-    const dx = config.positions[v][0] - config.positions[u][0];
-    const dy = config.positions[v][1] - config.positions[u][1];
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 1e-15) continue;
+    const dx = math.subtract(getEvaluatedBig(config.symbolicPositions[v][0]), getEvaluatedBig(config.symbolicPositions[u][0])) as any;
+    const dy = math.subtract(getEvaluatedBig(config.symbolicPositions[v][1]), getEvaluatedBig(config.symbolicPositions[u][1])) as any;
+    const dist = math.sqrt(math.add(math.multiply(dx, dx) as any, math.multiply(dy, dy) as any) as any) as any;
+    if (math.smaller(dist, math.bignumber(1e-15) as any) as any) continue;
 
-    const t: [number, number] = [dx / dist, dy / dist];
-    const block = computeEdgeBlock(t, dist);
-    addBlock(H, block, u, u, 1);
-    addBlock(H, block, v, v, 1);
-    addBlock(H, block, u, v, -1);
-    addBlock(H, block, v, u, -1);
+    const t: [any, any] = [math.divide(dx, dist) as any, math.divide(dy, dist) as any];
+    const blockBig = computeEdgeBlockBig(t, dist);
+    const floatBlock = blockBig.map(r => r.map(v => typeof v === 'object' && v && 'toNumber' in v ? v.toNumber() : Number(v)));
+    
+    addBlock(H, floatBlock, u, u, 1);
+    addBlock(H, floatBlock, v, v, 1);
+    addBlock(H, floatBlock, u, v, -1);
+    addBlock(H, floatBlock, v, u, -1);
   }
 
   return H;
@@ -104,25 +121,35 @@ export function buildGeometricHessian(config: Configuration, lambdas: number[]):
   const H = Array.from({ length: dim }, () => new Array(dim).fill(0));
 
   config.contacts.forEach(([i, j], idx) => {
-    const dx = config.positions[j][0] - config.positions[i][0];
-    const dy = config.positions[j][1] - config.positions[i][1];
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 1e-15) return;
+    const pi = config.symbolicPositions[i];
+    const pj = config.symbolicPositions[j];
+    const dx = math.subtract(getEvaluatedBig(pj[0]), getEvaluatedBig(pi[0])) as any;
+    const dy = math.subtract(getEvaluatedBig(pj[1]), getEvaluatedBig(pi[1])) as any;
+    const dist = math.sqrt(math.add(math.multiply(dx, dx) as any, math.multiply(dy, dy) as any) as any) as any;
+    if (math.smaller(dist, math.bignumber(1e-15) as any) as any) return;
 
-    const ux = dx / dist;
-    const uy = dy / dist;
+    const ux = math.divide(dx, dist) as any;
+    const uy = math.divide(dy, dist) as any;
     const lam = lambdas[idx] || 0.0;
+    const lamBig = math.bignumber(lam) as any;
 
-    const factor = -lam / 2.0;
-    const block = [
-      [factor * (1 - ux * ux), factor * (-ux * uy)],
-      [factor * (-ux * uy), factor * (1 - uy * uy)],
+    const factor = math.divide(math.unaryMinus(lamBig) as any, math.bignumber(2.0) as any) as any;
+    const one = math.bignumber(1) as any;
+    const b00 = math.multiply(factor, math.subtract(one, math.multiply(ux, ux) as any) as any) as any;
+    const b01 = math.multiply(factor, math.multiply(math.unaryMinus(ux) as any, uy) as any) as any;
+    const b10 = b01;
+    const b11 = math.multiply(factor, math.subtract(one, math.multiply(uy, uy) as any) as any) as any;
+
+    const blockBig = [
+      [b00, b01],
+      [b10, b11]
     ];
+    const floatBlock = blockBig.map(r => r.map(v => typeof v === 'object' && v && 'toNumber' in v ? v.toNumber() : Number(v)));
 
-    addBlock(H, block, i, i, 1);
-    addBlock(H, block, j, j, 1);
-    addBlock(H, block, i, j, -1);
-    addBlock(H, block, j, i, -1);
+    addBlock(H, floatBlock, i, i, 1);
+    addBlock(H, floatBlock, j, j, 1);
+    addBlock(H, floatBlock, i, j, -1);
+    addBlock(H, floatBlock, j, i, -1);
   });
 
   return H;

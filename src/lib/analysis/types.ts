@@ -1,11 +1,12 @@
-import { ParsedContactClass } from '../types';
+import { ParsedContactClass, ParsedCoordinate } from '../types';
 
 export type Point = [number, number];
 export type Contact = [number, number];
 
 export interface Configuration {
   n: number;                  // Number of disks
-  positions: Point[];         // Center positions
+  positions: Point[];         // Center positions (Float64)
+  symbolicPositions: [ParsedCoordinate, ParsedCoordinate][]; // Exact coordinates (Symbolic/BigNumber)
   radii: number[];            // Disk radii
   contacts: Contact[];        // Contact pairs
   latticeContacts: Contact[]; // Contacts through lattice translation (unused, keep for CLI API compatibility)
@@ -26,7 +27,7 @@ export interface ConstraintData {
 }
 
 export interface PerimeterResult {
-  perimeter: number;
+  perimeter: any;
   gradient: number[];
 }
 
@@ -49,14 +50,18 @@ export interface AnalysisResult {
   hessian: HessianResult;
   projectedGradient: number[];
   isCritical: boolean;
-  perimeterCenters: number;        // Perimeter of centers only (without 2πr)
+  perimeterCenters: any;        // Perimeter of centers only (without 2πr)
   summary: string;
 }
 
 export function parsedContactClassToConfiguration(cls: ParsedContactClass): Configuration {
   return {
     n: cls.disksCount,
-    positions: cls.centers.map(([x, y]) => [x, y]),
+    positions: cls.centers.map(([x, y]) => [x.floatValue, y.floatValue]),
+    symbolicPositions: cls.centers.map(([x, y]) => [
+      { floatValue: x.floatValue, symbolicAst: x.symbolicAst },
+      { floatValue: y.floatValue, symbolicAst: y.symbolicAst }
+    ]),
     radii: new Array(cls.disksCount).fill(1.0), // All disks are unit disks (radius = 1.0, contact distance = 2.0)
     contacts: cls.contacts.map(([u, v]) => [u, v]),
     latticeContacts: [],

@@ -1,5 +1,7 @@
 import { Matrix, EigenvalueDecomposition } from 'ml-matrix';
 import { Configuration, ConstraintData } from './types';
+import { math } from '../math';
+import { getEvaluatedBig } from '../parser';
 
 /**
  * Build the contact constraint Jacobian matrix A(c).
@@ -8,30 +10,37 @@ import { Configuration, ConstraintData } from './types';
  *   row_k = [..., -u_ij_x, -u_ij_y, ..., u_ij_x, u_ij_y, ...]
  * 
  * A(c) ∈ R^{m × 2n}
+ * Uses high-precision BigNumber calculations before casting to Float64.
  */
 export function buildContactMatrix(config: Configuration): number[][] {
-  const { n, positions, contacts } = config;
+  const { n, symbolicPositions, contacts } = config;
   const cols = 2 * n;
   const A: number[][] = [];
 
   for (const [i, j] of contacts) {
     const row = new Array(cols).fill(0);
 
-    const dx = positions[j][0] - positions[i][0];
-    const dy = positions[j][1] - positions[i][1];
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const pi = symbolicPositions[i];
+    const pj = symbolicPositions[j];
 
-    if (dist < 1e-15) {
+    const dx = math.subtract(getEvaluatedBig(pj[0]), getEvaluatedBig(pi[0])) as any;
+    const dy = math.subtract(getEvaluatedBig(pj[1]), getEvaluatedBig(pi[1])) as any;
+    const dist = math.sqrt(math.add(math.multiply(dx, dx), math.multiply(dy, dy)) as any) as any;
+
+    if (math.smaller(dist, math.bignumber(1e-15) as any)) {
       throw new Error(`Disks ${i} and ${j} have coincident centers`);
     }
 
-    const ux = dx / dist;
-    const uy = dy / dist;
+    const ux = math.divide(dx, dist as any) as any;
+    const uy = math.divide(dy, dist as any) as any;
 
-    row[2 * i] = -ux;
-    row[2 * i + 1] = -uy;
-    row[2 * j] = ux;
-    row[2 * j + 1] = uy;
+    const uxFloat = typeof ux === 'object' && ux && 'toNumber' in ux ? ux.toNumber() : Number(ux);
+    const uyFloat = typeof uy === 'object' && uy && 'toNumber' in uy ? uy.toNumber() : Number(uy);
+
+    row[2 * i] = -uxFloat;
+    row[2 * i + 1] = -uyFloat;
+    row[2 * j] = uxFloat;
+    row[2 * j + 1] = uyFloat;
 
     A.push(row);
   }
@@ -50,8 +59,6 @@ export function rollingSpaceBasis(
   tolerance: number = 1e-10
 ): number[][] {
   if (A.length === 0) {
-    // If no contacts, the rolling space is the full 2n-dimensional space.
-    // Return the identity matrix of size 2n.
     if (A.length === 0 && A[0] === undefined) {
       return [];
     }

@@ -48,7 +48,7 @@ function computeProjectedGradient(
   return projected;
 }
 
-export function analyzeConfiguration(config: Configuration): AnalysisResult {
+export function analyzeConfiguration(config: Configuration, tolerance?: number): AnalysisResult {
   // Step 1: Validate graph
   const graphValidation = checkGraphValidity(config);
 
@@ -66,7 +66,7 @@ export function analyzeConfiguration(config: Configuration): AnalysisResult {
     perimeter.gradient,
     constraints.rollingMatrix
   );
-  const isCritical = isCriticalPoint(perimeter.gradient, constraints.rollingMatrix);
+  const isCritical = isCriticalPoint(perimeter.gradient, constraints.rollingMatrix, tolerance);
 
   // Step 7: Summary
   const perimCenters = perimeterOfCenters(config);

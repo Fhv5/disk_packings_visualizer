@@ -2,9 +2,10 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '@/lib/store';
 import { getBoundingBox, Point2D } from '@/lib/geometry';
+import { ParsedCoordinate } from '@/lib/types';
 
 interface ThumbnailCanvasProps {
-  centers: [number, number][];
+  centers: [ParsedCoordinate, ParsedCoordinate][];
   contacts: [number, number][];
   width?: number;
   height?: number;
@@ -25,7 +26,8 @@ export function ThumbnailCanvas({ centers, contacts, width = 200, height = 150 }
 
       if (centers.length === 0) return;
 
-      const box = getBoundingBox(centers as Point2D[]);
+      const floatPoints = centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
+      const box = getBoundingBox(floatPoints);
       let minX = box.minX;
       let minY = box.minY;
       let maxX = box.maxX;
@@ -76,8 +78,8 @@ export function ThumbnailCanvas({ centers, contacts, width = 200, height = 150 }
         const p1 = centers[u];
         const p2 = centers[v];
         if (p1 && p2) {
-          ctx.moveTo(p1[0], p1[1]);
-          ctx.lineTo(p2[0], p2[1]);
+          ctx.moveTo(p1[0].floatValue, p1[1].floatValue);
+          ctx.lineTo(p2[0].floatValue, p2[1].floatValue);
         }
         ctx.stroke();
       });
@@ -85,7 +87,7 @@ export function ThumbnailCanvas({ centers, contacts, width = 200, height = 150 }
       const isLight = theme === 'light';
       centers.forEach(([x, y]) => {
         ctx.beginPath();
-        ctx.arc(x, y, 1, 0, 2 * Math.PI);
+        ctx.arc(x.floatValue, y.floatValue, 1, 0, 2 * Math.PI);
         ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.08)';
         ctx.fill();
         ctx.strokeStyle = isLight ? '#8e8e93' : '#a1a1aa';

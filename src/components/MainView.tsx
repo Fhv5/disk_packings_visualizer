@@ -74,13 +74,10 @@ export function MainView() {
     if (classId) {
       const found = (loadedFiles || []).flatMap(f => f?.contactClasses || []).find(c => c?.id === classId);
       if (found) {
-        useAppStore.setState({
-          selectedClass: found,
-          activeWorkspace: JSON.parse(JSON.stringify(found))
-        });
+        setSelectedClass(found);
       }
     }
-  }, [loadedFiles]);
+  }, [loadedFiles, setSelectedClass]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

@@ -1,26 +1,37 @@
 import { create } from 'zustand';
-import { ParsedContactClass, ParsedFile } from './types';
+import { ParsedContactClass, ParsedFile, ParsedCoordinate } from './types';
 import { parsePackingFile } from './parser';
+import { math } from './math';
 
-import data3 from '../../data/3disks.json';
-import data4 from '../../data/4disks.json';
-import data5 from '../../data/5disks.json';
-import data6 from '../../data/6disks.json';
+function cloneParsedContactClass(cls: ParsedContactClass): ParsedContactClass {
+  return {
+    ...cls,
+    centers: cls.centers.map(([x, y]) => [
+      { floatValue: x.floatValue, symbolicAst: x.symbolicAst.clone() },
+      { floatValue: y.floatValue, symbolicAst: y.symbolicAst.clone() }
+    ]),
+    contacts: cls.contacts.map(([u, v]) => [u, v])
+  };
+}
 
 const defaultFiles: ParsedFile[] = [];
 try {
-  const files = [
-    { data: data3, name: '3disks.json' },
-    { data: data4, name: '4disks.json' },
-    { data: data5, name: '5disks.json' },
-    { data: data6, name: '6disks.json' },
-  ];
-  for (const file of files) {
-    const { data } = parsePackingFile(JSON.stringify(file.data), file.name);
-    if (data) {
-      defaultFiles.push(data);
+  // @ts-ignore
+  const context = require.context('../../data', false, /\.json$/);
+  context.keys().forEach((key: string) => {
+    const data = context(key);
+    const fileName = key.replace('./', '');
+    const { data: parsedData, errors, warnings } = parsePackingFile(JSON.stringify(data), fileName);
+    if (parsedData) {
+      defaultFiles.push(parsedData);
     }
-  }
+    if (errors && errors.length > 0) {
+      console.error(`Error parsing ${fileName}:`, errors);
+    }
+    if (warnings && warnings.length > 0) {
+      console.warn(`Warning parsing ${fileName}:`, warnings);
+    }
+  });
 } catch (e) {
   console.error('Failed to parse default files in store', e);
 }
@@ -70,7 +81,7 @@ interface AppState {
   addLoadedFile: (file: ParsedFile) => void;
   setSelectedClass: (cls: ParsedContactClass | null) => void;
   setActiveWorkspace: (cls: ParsedContactClass | null) => void;
-  updateWorkspaceCenters: (centers: [number, number][]) => void;
+  updateWorkspaceCenters: (centers: [number, number][] | [ParsedCoordinate, ParsedCoordinate][]) => void;
   togglePin: (idx: number) => void;
   pushPerimeterHistory: (p: number) => void;
   clearPerimeterHistory: () => void;
@@ -102,6 +113,10 @@ interface AppState {
   toggleAnalysisMode: () => void;
   goToNextConfig: () => void;
   goToPrevConfig: () => void;
+  criticalityTolerance: number;
+  setCriticalityTolerance: (tolerance: number) => void;
+  stopOnCritical: boolean;
+  setStopOnCritical: (stop: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -122,6 +137,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   undoStacks: {},
   redoStacks: {},
   theme: 'dark',
+  criticalityTolerance: 1e-6,
+  stopOnCritical: false,
   
   searchQuery: '',
   diskFilter: 'all',
@@ -202,7 +219,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedClass: (cls) => 
     set({ 
       selectedClass: cls, 
-      activeWorkspace: cls ? JSON.parse(JSON.stringify(cls)) : null,
+      activeWorkspace: cls ? cloneParsedContactClass(cls) : null,
       pinnedDisks: new Set(),
       selectedDisks: new Set(),
       perimeterHistory: [],
@@ -216,9 +233,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ activeWorkspace: cls }),
     
   updateWorkspaceCenters: (centers) =>
-    set((state) => ({ 
-      activeWorkspace: state.activeWorkspace ? { ...state.activeWorkspace, centers } : null 
-    })),
+    set((state) => {
+      if (!state.activeWorkspace) return {};
+      const isParsed = centers.length > 0 && typeof centers[0][0] === 'object';
+      let wrapped: [ParsedCoordinate, ParsedCoordinate][];
+      if (isParsed) {
+        wrapped = centers as [ParsedCoordinate, ParsedCoordinate][];
+      } else {
+        wrapped = (centers as [number, number][]).map(([x, y]) => [
+          { floatValue: x, symbolicAst: math.parse(x.toString()) },
+          { floatValue: y, symbolicAst: math.parse(y.toString()) }
+        ]);
+      }
+      return {
+        activeWorkspace: { ...state.activeWorkspace, centers: wrapped }
+      };
+    }),
 
   togglePin: (idx) =>
     set((state) => {
@@ -247,11 +277,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearErrors: () => set({ errors: [] }),
   clearWarnings: () => set({ warnings: [] }),
   
-  reset: () => set({ loadedFiles: [], selectedClass: null, warnings: [], errors: [] }),
+  reset: () => set({ loadedFiles: [], selectedClass: null, warnings: [], errors: [], criticalityTolerance: 1e-6, stopOnCritical: false }),
+  setCriticalityTolerance: (tolerance) => set({ criticalityTolerance: tolerance }),
+  setStopOnCritical: (stop) => set({ stopOnCritical: stop }),
   restoreOriginalWorkspace: () => set((state) => {
     if (!state.selectedClass) return state;
     return {
-      activeWorkspace: JSON.parse(JSON.stringify(state.selectedClass)),
+      activeWorkspace: cloneParsedContactClass(state.selectedClass),
       perimeterHistory: [],
       selectedDisks: new Set(),
       undoStacks: {},
@@ -277,14 +309,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       if (!state.activeWorkspace) return state;
       const prevCoord = state.activeWorkspace.centers[idx];
+      const prevFloat: [number, number] = [prevCoord[0].floatValue, prevCoord[1].floatValue];
       const currentStack = state.undoStacks[idx] || [];
       
       if (
         currentStack.length === 0 ||
-        currentStack[currentStack.length - 1][0] !== prevCoord[0] ||
-        currentStack[currentStack.length - 1][1] !== prevCoord[1]
+        currentStack[currentStack.length - 1][0] !== prevFloat[0] ||
+        currentStack[currentStack.length - 1][1] !== prevFloat[1]
       ) {
-        const updatedStack = [...currentStack, prevCoord];
+        const updatedStack = [...currentStack, prevFloat];
         if (updatedStack.length > 100) updatedStack.shift();
         
         return {
@@ -305,12 +338,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       const nextUndo = currentUndo.slice(0, -1);
       
       const currentCoord = state.activeWorkspace.centers[idx];
+      const currentFloat: [number, number] = [currentCoord[0].floatValue, currentCoord[1].floatValue];
       const currentRedo = state.redoStacks[idx] || [];
-      const nextRedo = [...currentRedo, currentCoord];
+      const nextRedo = [...currentRedo, currentFloat];
       if (nextRedo.length > 100) nextRedo.shift();
 
       const newCenters = [...state.activeWorkspace.centers];
-      newCenters[idx] = previousCoord;
+      newCenters[idx] = [
+        { floatValue: previousCoord[0], symbolicAst: math.parse(previousCoord[0].toString()) },
+        { floatValue: previousCoord[1], symbolicAst: math.parse(previousCoord[1].toString()) }
+      ];
 
       return {
         activeWorkspace: { ...state.activeWorkspace, centers: newCenters },
@@ -329,12 +366,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       const nextRedo = currentRedo.slice(0, -1);
 
       const currentCoord = state.activeWorkspace.centers[idx];
+      const currentFloat: [number, number] = [currentCoord[0].floatValue, currentCoord[1].floatValue];
       const currentUndo = state.undoStacks[idx] || [];
-      const nextUndo = [...currentUndo, currentCoord];
+      const nextUndo = [...currentUndo, currentFloat];
       if (nextUndo.length > 100) nextUndo.shift();
 
       const newCenters = [...state.activeWorkspace.centers];
-      newCenters[idx] = nextCoord;
+      newCenters[idx] = [
+        { floatValue: nextCoord[0], symbolicAst: math.parse(nextCoord[0].toString()) },
+        { floatValue: nextCoord[1], symbolicAst: math.parse(nextCoord[1].toString()) }
+      ];
 
       return {
         activeWorkspace: { ...state.activeWorkspace, centers: newCenters },
@@ -349,9 +390,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       const originalCoord = state.selectedClass.centers[idx];
       const currentCoord = state.activeWorkspace.centers[idx];
 
-      if (currentCoord[0] !== originalCoord[0] || currentCoord[1] !== originalCoord[1]) {
+      if (
+        currentCoord[0].floatValue !== originalCoord[0].floatValue || 
+        currentCoord[1].floatValue !== originalCoord[1].floatValue
+      ) {
         const currentUndo = state.undoStacks[idx] || [];
-        const nextUndo = [...currentUndo, currentCoord];
+        const currentFloat: [number, number] = [currentCoord[0].floatValue, currentCoord[1].floatValue];
+        const nextUndo = [...currentUndo, currentFloat];
         if (nextUndo.length > 100) nextUndo.shift();
 
         const newCenters = [...state.activeWorkspace.centers];

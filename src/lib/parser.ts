@@ -1,104 +1,72 @@
-import { PackingFileJSON, ParsedFile, ParsedContactClass } from './types';
+import { PackingFileJSON, ParsedFile, ParsedContactClass, ParsedCoordinate } from './types';
+import { math } from './math';
 
 export const TOLERANCE = 1e-6;
 export const CONTACT_DISTANCE = 2.0;
 
 export function evaluateMath(expression: string): number {
-  if (!expression || expression.trim() === '') return NaN;
-  
-  let expr = expression.replace(/\bpi\b/gi, Math.PI.toString());
-  
-  const tokens: string[] = [];
-  const regex = /\s*([A-Za-z_][A-Za-z0-9_]*|[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?|\S)\s*/g;
-  let match;
-  while ((match = regex.exec(expr)) !== null) {
-    if (match[1]) tokens.push(match[1]);
-  }
-  
-  let pos = 0;
-  
-  function parseExpression(): number {
-    let value = parseTerm();
-    while (pos < tokens.length && (tokens[pos] === '+' || tokens[pos] === '-')) {
-      const op = tokens[pos++];
-      const nextTerm = parseTerm();
-      if (op === '+') value += nextTerm;
-      else value -= nextTerm;
-    }
-    return value;
-  }
-  
-  function parseTerm(): number {
-    let value = parseFactor();
-    while (pos < tokens.length && (tokens[pos] === '*' || tokens[pos] === '/')) {
-      const op = tokens[pos++];
-      const nextFactor = parseFactor();
-      if (op === '*') value *= nextFactor;
-      else value /= nextFactor;
-    }
-    return value;
-  }
-  
-  function parseFactor(): number {
-    if (pos >= tokens.length) throw new Error("Unexpected end of expression");
+  try {
+    if (!expression || expression.trim() === '') return NaN;
+    const evaluated = math.evaluate(expression);
     
-    let token = tokens[pos++];
-    
-    if (token === '+') return parseFactor();
-    if (token === '-') return -parseFactor();
-    
-    if (token === '(') {
-      const value = parseExpression();
-      if (pos >= tokens.length || tokens[pos++] !== ')') {
-        throw new Error("Missing closing parenthesis");
-      }
-      return value;
+    // Coordinates must be dimensionless scalar numbers (number, BigNumber, Fraction)
+    const type = math.typeOf(evaluated);
+    if (type !== 'number' && type !== 'BigNumber' && type !== 'Fraction') {
+      return NaN;
     }
     
-    const functions: Record<string, (n: number) => number> = {
-      sqrt: Math.sqrt,
-      sin: Math.sin,
-      cos: Math.cos,
-      tan: Math.tan,
-      sind: (n) => Math.sin(n * Math.PI / 180),
-      cosd: (n) => Math.cos(n * Math.PI / 180),
-      tand: (n) => Math.tan(n * Math.PI / 180),
-      abs: Math.abs,
-      floor: Math.floor,
-      ceil: Math.ceil
-    };
-    
-    if (functions[token.toLowerCase()]) {
-      if (pos >= tokens.length || tokens[pos] !== '(') {
-        throw new Error(`Expected '(' after function ${token}`);
-      }
-      pos++;
-      const value = parseExpression();
-      if (pos >= tokens.length || tokens[pos++] !== ')') {
-        throw new Error("Missing closing parenthesis");
-      }
-      return functions[token.toLowerCase()](value);
-    }
-    
-    const num = parseFloat(token);
-    if (isNaN(num)) {
-      throw new Error(`Invalid token: ${token}`);
-    }
-    return num;
+    return typeof evaluated === 'object' && evaluated && 'toNumber' in evaluated 
+      ? evaluated.toNumber() 
+      : Number(evaluated);
+  } catch {
+    return NaN;
   }
-  
-  const result = parseExpression();
-  if (pos < tokens.length) {
-    throw new Error(`Unexpected token at end: ${tokens[pos]}`);
-  }
-  
-  return result;
 }
 
-function distance(p1: [number, number], p2: [number, number]): number {
-  const dx = p1[0] - p2[0];
-  const dy = p1[1] - p2[1];
-  return Math.sqrt(dx * dx + dy * dy);
+export function parseCoordinate(expression: string | number): ParsedCoordinate {
+  if (typeof expression === 'number') {
+    return {
+      floatValue: expression,
+      symbolicAst: math.parse(expression.toString())
+    };
+  }
+  const node = math.parse(expression);
+  const evaluated = node.evaluate();
+  
+  // Coordinates must be dimensionless scalar numbers (number, BigNumber, Fraction)
+  const type = math.typeOf(evaluated);
+  if (type !== 'number' && type !== 'BigNumber' && type !== 'Fraction') {
+    throw new Error(`Invalid coordinate expression: evaluated to a ${type}`);
+  }
+  
+  const floatValue = typeof evaluated === 'object' && evaluated && 'toNumber' in evaluated 
+    ? evaluated.toNumber() 
+    : Number(evaluated);
+  return {
+    floatValue,
+    symbolicAst: node
+  };
+}
+
+export function getEvaluatedBig(coord: ParsedCoordinate): any {
+  if (coord._evaluatedBig !== undefined) {
+    return coord._evaluatedBig;
+  }
+  const val = coord.symbolicAst.evaluate();
+  coord._evaluatedBig = val;
+  return val;
+}
+
+function distanceBigNumber(p1: [ParsedCoordinate, ParsedCoordinate], p2: [ParsedCoordinate, ParsedCoordinate]): any {
+  const x1 = getEvaluatedBig(p1[0]);
+  const y1 = getEvaluatedBig(p1[1]);
+  const x2 = getEvaluatedBig(p2[0]);
+  const y2 = getEvaluatedBig(p2[1]);
+
+  const dx = math.subtract(x1, x2) as any;
+  const dy = math.subtract(y1, y2) as any;
+  
+  return math.sqrt(math.add(math.multiply(dx, dx) as any, math.multiply(dy, dy) as any) as any);
 }
 
 export function parsePackingFile(jsonStr: string, fileName: string): { data: ParsedFile | null, warnings: string[], errors: string[] } {
@@ -124,7 +92,7 @@ export function parsePackingFile(jsonStr: string, fileName: string): { data: Par
         return;
       }
 
-      const parsedCenters: [number, number][] = [];
+      const parsedCenters: [ParsedCoordinate, ParsedCoordinate][] = [];
       for (let i = 0; i < graph.centros.length; i++) {
         const c = graph.centros[i];
         if (!Array.isArray(c) || c.length < 2) {
@@ -133,9 +101,9 @@ export function parsePackingFile(jsonStr: string, fileName: string): { data: Par
         }
         
         try {
-          const x = typeof c[0] === 'string' ? evaluateMath(c[0]) : c[0];
-          const y = typeof c[1] === 'string' ? evaluateMath(c[1]) : c[1];
-          if (isNaN(x) || isNaN(y)) throw new Error("NaN result");
+          const x = parseCoordinate(c[0]);
+          const y = parseCoordinate(c[1]);
+          if (isNaN(x.floatValue) || isNaN(y.floatValue)) throw new Error("NaN result");
           parsedCenters.push([x, y]);
         } catch (e: any) {
           errors.push(`${classId}: Expression evaluation error for center ${i}: ${e.message}`);
@@ -172,10 +140,15 @@ export function parsePackingFile(jsonStr: string, fileName: string): { data: Par
         }
       }
 
+      const BIG_TOLERANCE = math.bignumber(1e-12);
+      const BIG_CONTACT_DIST = math.bignumber(2.0);
+
       parsedContacts.forEach(([u, v]) => {
-        const d = distance(parsedCenters[u], parsedCenters[v]);
-        if (Math.abs(d - CONTACT_DISTANCE) > TOLERANCE) {
-          warnings.push(`${classId}: Contact distance mismatch for [${u}, ${v}]. d = ${d.toFixed(6)}`);
+        const dExact = distanceBigNumber(parsedCenters[u], parsedCenters[v]);
+        const diff = math.abs(math.subtract(dExact, BIG_CONTACT_DIST));
+        if (math.larger(diff, BIG_TOLERANCE)) {
+          const dFloat = typeof dExact === 'object' && dExact && 'toNumber' in dExact ? dExact.toNumber() : Number(dExact);
+          warnings.push(`${classId}: Contact distance mismatch for [${u}, ${v}]. d = ${dFloat.toFixed(15)}`);
         }
       });
 
@@ -183,9 +156,11 @@ export function parsePackingFile(jsonStr: string, fileName: string): { data: Par
         for (let j = i + 1; j < graph.discos; j++) {
           const edgeKey = `${i}-${j}`;
           if (!adjacency.has(edgeKey)) {
-            const d = distance(parsedCenters[i], parsedCenters[j]);
-            if (d < CONTACT_DISTANCE - TOLERANCE) {
-              warnings.push(`${classId}: Non-overlap violation for [${i}, ${j}]. d = ${d.toFixed(6)}`);
+            const dExact = distanceBigNumber(parsedCenters[i], parsedCenters[j]);
+            const limit = math.subtract(BIG_CONTACT_DIST, BIG_TOLERANCE);
+            if (math.smaller(dExact, limit)) {
+              const dFloat = typeof dExact === 'object' && dExact && 'toNumber' in dExact ? dExact.toNumber() : Number(dExact);
+              warnings.push(`${classId}: Non-overlap violation for [${i}, ${j}]. d = ${dFloat.toFixed(15)}`);
             }
           }
         }

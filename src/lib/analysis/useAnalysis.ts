@@ -7,10 +7,12 @@ import { AnalysisResult, parsedContactClassToConfiguration, analyzeConfiguration
 let globalAnalysisCache: {
   workspaceId: string | null;
   centersStr: string;
+  tolerance: number;
   data: AnalysisResult | null;
 } = {
   workspaceId: null,
   centersStr: '',
+  tolerance: 0,
   data: null
 };
 
@@ -18,19 +20,24 @@ export function useAnalysis(
   workspace: ParsedContactClass | null,
   isDebounced: boolean = true
 ) {
+  const isRolling = useAppStore(state => state.isRolling);
+  const criticalityTolerance = useAppStore(state => state.criticalityTolerance);
+
   // Stringify only float values for efficient change detection
   const centersStr = workspace
     ? JSON.stringify(workspace.centers.map(([x, y]) => [x.floatValue, y.floatValue]))
     : '';
 
-  const initialData = (workspace && globalAnalysisCache.workspaceId === workspace.id && globalAnalysisCache.centersStr === centersStr)
+  const initialData = (workspace && 
+                       globalAnalysisCache.workspaceId === workspace.id && 
+                       globalAnalysisCache.centersStr === centersStr &&
+                       globalAnalysisCache.tolerance === criticalityTolerance)
     ? globalAnalysisCache.data
     : null;
 
   const [data, setData] = useState<AnalysisResult | null>(initialData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isRolling = useAppStore(state => state.isRolling);
 
   // Track the last workspace ID to detect initial load vs updates
   const lastWorkspaceIdRef = useRef<string | null>(workspace?.id || null);
@@ -42,7 +49,7 @@ export function useAnalysis(
       setData(null);
       setError(null);
       setLoading(false);
-      globalAnalysisCache = { workspaceId: null, centersStr: '', data: null };
+      globalAnalysisCache = { workspaceId: null, centersStr: '', tolerance: 0, data: null };
       return;
     }
 
@@ -51,7 +58,7 @@ export function useAnalysis(
     const configIdChanged = lastWorkspaceIdRef.current !== workspace.id;
     lastWorkspaceIdRef.current = workspace.id;
 
-    // If we already have up-to-date cached data for this configuration/positions, use it immediately
+    // If we already have up-to-date cached data for this configuration/positions/tolerance, use it immediately
     if (initialData && !configIdChanged) {
       setLoading(false);
       return;
@@ -73,11 +80,12 @@ export function useAnalysis(
 
       try {
         const config = parsedContactClassToConfiguration(workspace);
-        const result = analyzeConfiguration(config);
+        const result = analyzeConfiguration(config, criticalityTolerance);
         setData(result);
         globalAnalysisCache = {
           workspaceId: workspace.id,
           centersStr,
+          tolerance: criticalityTolerance,
           data: result
         };
         setError(null);
@@ -95,12 +103,13 @@ export function useAnalysis(
           if (cancelled) return;
           try {
             const config = parsedContactClassToConfiguration(workspace);
-            const result = analyzeConfiguration(config);
+            const result = analyzeConfiguration(config, criticalityTolerance);
             if (!cancelled) {
               setData(result);
               globalAnalysisCache = {
                 workspaceId: workspace.id,
                 centersStr,
+                tolerance: criticalityTolerance,
                 data: result
               };
               setError(null);
@@ -132,7 +141,7 @@ export function useAnalysis(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [workspace?.id, centersStr, isRolling, isDebounced, initialData]);
+  }, [workspace?.id, centersStr, isRolling, isDebounced, initialData, criticalityTolerance]);
 
   return { data, loading, error };
 }

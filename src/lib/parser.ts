@@ -23,15 +23,17 @@ export function evaluateMath(expression: string): number {
   }
 }
 
-export function parseCoordinate(expression: string | number): ParsedCoordinate {
+export function parseCoordinate(expression: string | number, scope?: any): ParsedCoordinate {
   if (typeof expression === 'number') {
     return {
       floatValue: expression,
-      symbolicAst: math.parse(expression.toString())
+      symbolicAst: math.parse(expression.toString()),
+      _evaluatedBig: math.bignumber(expression)
     };
   }
-  const node = math.parse(expression);
-  const evaluated = node.evaluate();
+  const sanitized = expression.replace(/\*\*/g, '^');
+  const node = math.parse(sanitized);
+  const evaluated = node.evaluate(scope);
   
   // Coordinates must be dimensionless scalar numbers (number, BigNumber, Fraction)
   const type = math.typeOf(evaluated);
@@ -44,7 +46,8 @@ export function parseCoordinate(expression: string | number): ParsedCoordinate {
     : Number(evaluated);
   return {
     floatValue,
-    symbolicAst: node
+    symbolicAst: node,
+    _evaluatedBig: evaluated
   };
 }
 
@@ -92,6 +95,20 @@ export function parsePackingFile(jsonStr: string, fileName: string): { data: Par
         return;
       }
 
+      const scope: Record<string, any> = {};
+      if (graph.auxiliary_constants) {
+        for (const [key, expr] of Object.entries(graph.auxiliary_constants)) {
+          try {
+            const sanitizedExpr = typeof expr === 'string' ? expr.replace(/\*\*/g, '^') : expr;
+            const val = math.evaluate(sanitizedExpr as string, scope);
+            scope[key] = val;
+          } catch (e: any) {
+            errors.push(`${classId}: Error evaluating auxiliary constant '${key}': ${e.message}`);
+            return;
+          }
+        }
+      }
+
       const parsedCenters: [ParsedCoordinate, ParsedCoordinate][] = [];
       for (let i = 0; i < graph.centros.length; i++) {
         const c = graph.centros[i];
@@ -101,8 +118,8 @@ export function parsePackingFile(jsonStr: string, fileName: string): { data: Par
         }
         
         try {
-          const x = parseCoordinate(c[0]);
-          const y = parseCoordinate(c[1]);
+          const x = parseCoordinate(c[0], scope);
+          const y = parseCoordinate(c[1], scope);
           if (isNaN(x.floatValue) || isNaN(y.floatValue)) throw new Error("NaN result");
           parsedCenters.push([x, y]);
         } catch (e: any) {

@@ -59,8 +59,8 @@ export function parsedContactClassToConfiguration(cls: ParsedContactClass): Conf
     n: cls.disksCount,
     positions: cls.centers.map(([x, y]) => [x.floatValue, y.floatValue]),
     symbolicPositions: cls.centers.map(([x, y]) => [
-      { floatValue: x.floatValue, symbolicAst: x.symbolicAst },
-      { floatValue: y.floatValue, symbolicAst: y.symbolicAst }
+      { floatValue: x.floatValue, symbolicAst: x.symbolicAst, _evaluatedBig: x._evaluatedBig },
+      { floatValue: y.floatValue, symbolicAst: y.symbolicAst, _evaluatedBig: y._evaluatedBig }
     ]),
     radii: new Array(cls.disksCount).fill(1.0), // All disks are unit disks (radius = 1.0, contact distance = 2.0)
     contacts: cls.contacts.map(([u, v]) => [u, v]),

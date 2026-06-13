@@ -12,6 +12,7 @@ export type ContactPair = [number, number];
 export interface ContactClassJSON {
   discos: number;
   nombre?: string;
+  auxiliary_constants?: Record<string, string | number>;
   centros: Coordinate[][];
   contactos: ContactPair[];
 }

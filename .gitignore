@@ -42,3 +42,4 @@ next-env.d.ts
 
 # development docs
 /docs/*
+/data_backup

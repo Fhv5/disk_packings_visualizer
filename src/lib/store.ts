@@ -7,8 +7,8 @@ function cloneParsedContactClass(cls: ParsedContactClass): ParsedContactClass {
   return {
     ...cls,
     centers: cls.centers.map(([x, y]) => [
-      { floatValue: x.floatValue, symbolicAst: x.symbolicAst.clone() },
-      { floatValue: y.floatValue, symbolicAst: y.symbolicAst.clone() }
+      { floatValue: x.floatValue, symbolicAst: x.symbolicAst.clone(), _evaluatedBig: x._evaluatedBig },
+      { floatValue: y.floatValue, symbolicAst: y.symbolicAst.clone(), _evaluatedBig: y._evaluatedBig }
     ]),
     contacts: cls.contacts.map(([u, v]) => [u, v])
   };
@@ -238,11 +238,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       const isParsed = centers.length > 0 && typeof centers[0][0] === 'object';
       let wrapped: [ParsedCoordinate, ParsedCoordinate][];
       if (isParsed) {
-        wrapped = centers as [ParsedCoordinate, ParsedCoordinate][];
+        wrapped = (centers as [ParsedCoordinate, ParsedCoordinate][]).map(([x, y]) => [
+          { floatValue: x.floatValue, symbolicAst: x.symbolicAst.clone(), _evaluatedBig: x._evaluatedBig },
+          { floatValue: y.floatValue, symbolicAst: y.symbolicAst.clone(), _evaluatedBig: y._evaluatedBig }
+        ]);
       } else {
         wrapped = (centers as [number, number][]).map(([x, y]) => [
-          { floatValue: x, symbolicAst: math.parse(x.toString()) },
-          { floatValue: y, symbolicAst: math.parse(y.toString()) }
+          { floatValue: x, symbolicAst: math.parse(x.toString()), _evaluatedBig: math.bignumber(x) },
+          { floatValue: y, symbolicAst: math.parse(y.toString()), _evaluatedBig: math.bignumber(y) }
         ]);
       }
       return {
@@ -345,8 +348,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const newCenters = [...state.activeWorkspace.centers];
       newCenters[idx] = [
-        { floatValue: previousCoord[0], symbolicAst: math.parse(previousCoord[0].toString()) },
-        { floatValue: previousCoord[1], symbolicAst: math.parse(previousCoord[1].toString()) }
+        { floatValue: previousCoord[0], symbolicAst: math.parse(previousCoord[0].toString()), _evaluatedBig: math.bignumber(previousCoord[0]) },
+        { floatValue: previousCoord[1], symbolicAst: math.parse(previousCoord[1].toString()), _evaluatedBig: math.bignumber(previousCoord[1]) }
       ];
 
       return {
@@ -373,8 +376,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const newCenters = [...state.activeWorkspace.centers];
       newCenters[idx] = [
-        { floatValue: nextCoord[0], symbolicAst: math.parse(nextCoord[0].toString()) },
-        { floatValue: nextCoord[1], symbolicAst: math.parse(nextCoord[1].toString()) }
+        { floatValue: nextCoord[0], symbolicAst: math.parse(nextCoord[0].toString()), _evaluatedBig: math.bignumber(nextCoord[0]) },
+        { floatValue: nextCoord[1], symbolicAst: math.parse(nextCoord[1].toString()), _evaluatedBig: math.bignumber(nextCoord[1]) }
       ];
 
       return {

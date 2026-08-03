@@ -5,6 +5,7 @@ import { Gallery } from './Gallery';
 import { Workspace } from './Workspace/Workspace';
 import { Sun, Moon, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ExportModal } from './ExportModal';
+import { FEATURE_FLAGS } from '@/lib/config';
 
 export function MainView() {
   const loadedFiles = useAppStore(state => state.loadedFiles);
@@ -210,17 +211,19 @@ export function MainView() {
               Analysis
             </button>
           )}
-          <button
-            onClick={() => setIsExportModalOpen(true)}
-            className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm ${
-              theme === 'light'
-                ? 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 hover:text-zinc-900'
-                : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-600 hover:text-white'
-            }`}
-            title="Export JSON Data"
-          >
-            <Download size={15} />
-          </button>
+          {FEATURE_FLAGS.ENABLE_EXPORT && (
+            <button
+              onClick={() => setIsExportModalOpen(true)}
+              className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm ${
+                theme === 'light'
+                  ? 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 hover:text-zinc-900'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-600 hover:text-white'
+              }`}
+              title="Export JSON Data"
+            >
+              <Download size={15} />
+            </button>
+          )}
           <button
             onClick={toggleTheme}
             className={`p-2 rounded-lg border transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm ${
@@ -258,7 +261,7 @@ export function MainView() {
         )}
       </main>
 
-      {isExportModalOpen && <ExportModal onClose={() => setIsExportModalOpen(false)} />}
+      {FEATURE_FLAGS.ENABLE_EXPORT && isExportModalOpen && <ExportModal onClose={() => setIsExportModalOpen(false)} />}
     </div>
   );
 }

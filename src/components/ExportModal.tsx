@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { X, Download } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { convexHull, calculatePerimeter, getSymbolicPerimeter, Point2D } from '@/lib/geometry';
+import { FEATURE_FLAGS } from '@/lib/config';
 
 interface ExportModalProps {
   onClose: () => void;
 }
 
 export function ExportModal({ onClose }: ExportModalProps) {
+  if (!FEATURE_FLAGS.ENABLE_EXPORT) return null;
+
   const theme = useAppStore(state => state.theme);
   const workspace = useAppStore(state => state.activeWorkspace);
   const loadedFiles = useAppStore(state => state.loadedFiles);

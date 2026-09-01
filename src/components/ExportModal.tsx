@@ -1,93 +1,73 @@
 import { useState } from 'react';
 import { X, Download } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import { convexHull, calculatePerimeter, getSymbolicPerimeter, Point2D } from '@/lib/geometry';
 import { FEATURE_FLAGS } from '@/lib/config';
+import { createPackingExportGraph, PackingExportOptions } from '@/lib/export';
 
 interface ExportModalProps {
   onClose: () => void;
 }
 
 export function ExportModal({ onClose }: ExportModalProps) {
-  if (!FEATURE_FLAGS.ENABLE_EXPORT) return null;
-
   const theme = useAppStore(state => state.theme);
   const workspace = useAppStore(state => state.activeWorkspace);
   const loadedFiles = useAppStore(state => state.loadedFiles);
   const getFilteredClasses = useAppStore(state => state.getFilteredClasses);
+  const criticalityTolerance = useAppStore(state => state.criticalityTolerance);
+  const addErrors = useAppStore(state => state.addErrors);
 
   const [includeStructure, setIncludeStructure] = useState(true);
   const [includeDoF, setIncludeDoF] = useState(true);
   const [includeHullVertices, setIncludeHullVertices] = useState(true);
   const [includePerimeter, setIncludePerimeter] = useState(true);
+  const [includeAnalysis, setIncludeAnalysis] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+
+  if (!FEATURE_FLAGS.ENABLE_EXPORT) return null;
   
   const isGlobalExport = !workspace;
 
   if (!workspace && (!loadedFiles || loadedFiles.length === 0)) return null;
 
-  const handleExport = () => {
-    const data: any = {};
-    
-    // Structure similar to ./data/*.json
-    data.version = "1.1";
-    data.indexing = "0-based";
-    data.angles = "degrees";
-    data.radius = "1";
-    
-    const graphs: any[] = [];
-    
-    const sources = isGlobalExport 
-      ? getFilteredClasses()
-      : [workspace];
+  const handleExport = async () => {
+    setIsExporting(true);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-    for (const source of sources) {
-      if (!source) continue;
-      
-      const graph: any = {};
-      
-      if (includeStructure) {
-        graph.discos = source.disksCount;
-        graph.nombre = source.id;
-        graph.centros = source.centers.map((c) => [
-          Number(c[0].floatValue.toFixed(15)),
-          Number(c[1].floatValue.toFixed(15))
-        ]);
-        graph.contactos = source.contacts;
-      }
-      
-      if (includeDoF) {
-        graph.dof = source.dof;
-      }
-      
-      if (includeHullVertices || includePerimeter) {
-        const floatCenters = source.centers.map(([x, y]) => [x.floatValue, y.floatValue]) as Point2D[];
-        const hull = convexHull(floatCenters);
-        if (includeHullVertices) {
-          graph.hullVertices = hull.length;
-        }
-        if (includePerimeter) {
-          const exact = getSymbolicPerimeter(hull);
-          graph.perimeter = {
-            numeric: Number(calculatePerimeter(hull).toFixed(15)),
-            symbolic: exact
-          };
-        }
-      }
-      graphs.push(graph);
+    try {
+      const options: PackingExportOptions = {
+        includeStructure,
+        includeDoF,
+        includeHullVertices,
+        includePerimeter,
+        includeAnalysis,
+      };
+      const sources = isGlobalExport ? getFilteredClasses() : [workspace];
+      const graphs = sources
+        .filter((source) => source !== null)
+        .map((source) => createPackingExportGraph(source, options, criticalityTolerance));
+      const data = {
+        version: '1.1',
+        indexing: '0-based',
+        angles: 'degrees',
+        radius: '1',
+        graphs,
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 4)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = isGlobalExport ? 'all_configurations.json' : `${workspace?.id || 'export'}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addErrors([`Data export failed: ${message}`]);
+      setIsExporting(false);
     }
-    
-    data.graphs = graphs;
-
-    const blob = new Blob([JSON.stringify(data, null, 4)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = isGlobalExport ? 'all_configurations.json' : `${workspace?.id || 'export'}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    onClose();
   };
 
   return (
@@ -128,6 +108,10 @@ export function ExportModal({ onClose }: ExportModalProps) {
             <input type="checkbox" checked={includePerimeter} onChange={(e) => setIncludePerimeter(e.target.checked)} className="w-4 h-4 rounded cursor-pointer" />
             <span className={`text-sm font-medium ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'}`}>Perimeter (Numeric & Symbolic)</span>
           </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={includeAnalysis} onChange={(e) => setIncludeAnalysis(e.target.checked)} className="w-4 h-4 rounded cursor-pointer" />
+            <span className={`text-sm font-medium ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'}`}>Advanced Analysis (Matrices, Hessians & Eigenvalues)</span>
+          </label>
         </div>
 
         <div className="flex justify-end gap-3">
@@ -138,13 +122,13 @@ export function ExportModal({ onClose }: ExportModalProps) {
           </button>
           <button 
             onClick={handleExport}
-            disabled={!includeStructure && !includeDoF && !includeHullVertices && !includePerimeter}
+            disabled={isExporting || (!includeStructure && !includeDoF && !includeHullVertices && !includePerimeter && !includeAnalysis)}
             className={`px-4 py-2 text-sm font-medium rounded-md text-white flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               theme === 'light' ? 'bg-zinc-900 hover:bg-zinc-800' : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
             }`}
           >
             <Download size={16} />
-            Download JSON
+            {isExporting ? 'Computing…' : 'Download JSON'}
           </button>
         </div>
       </div>

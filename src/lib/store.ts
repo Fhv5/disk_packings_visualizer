@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { ParsedContactClass, ParsedFile, ParsedCoordinate } from './types';
 import { parsePackingFile } from './parser';
 import { math } from './math';
+import { DEFAULT_CRITICALITY_TOLERANCE } from './config';
 
 function cloneParsedContactClass(cls: ParsedContactClass): ParsedContactClass {
   return {
@@ -137,7 +138,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   undoStacks: {},
   redoStacks: {},
   theme: 'dark',
-  criticalityTolerance: 1e-6,
+  criticalityTolerance: DEFAULT_CRITICALITY_TOLERANCE,
   stopOnCritical: false,
   
   searchQuery: '',
@@ -280,7 +281,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearErrors: () => set({ errors: [] }),
   clearWarnings: () => set({ warnings: [] }),
   
-  reset: () => set({ loadedFiles: [], selectedClass: null, warnings: [], errors: [], criticalityTolerance: 1e-6, stopOnCritical: false }),
+  reset: () => set({ loadedFiles: [], selectedClass: null, warnings: [], errors: [], criticalityTolerance: DEFAULT_CRITICALITY_TOLERANCE, stopOnCritical: false }),
   setCriticalityTolerance: (tolerance) => set({ criticalityTolerance: tolerance }),
   setStopOnCritical: (stop) => set({ stopOnCritical: stop }),
   restoreOriginalWorkspace: () => set((state) => {
